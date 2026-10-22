@@ -32,7 +32,7 @@ public actor AVEWebSocketClient {
     public nonisolated let audio: AsyncStream<Data>
 
     private let config: Configuration
-    private let tokenProvider: @Sendable () -> String?
+    private let tokenProvider: AVETokenProvider
     private let transportFactory: TransportFactory
     private let log: AVELogger
     private let eventsOut: AsyncStream<ClientEvent>.Continuation
@@ -55,7 +55,7 @@ public actor AVEWebSocketClient {
     private var lastInbound = ContinuousClock.now
 
     public init(configuration: Configuration,
-                tokenProvider: @escaping @Sendable () -> String? = { nil },
+                tokenProvider: @escaping AVETokenProvider = { nil },
                 transportFactory: @escaping TransportFactory = URLSessionWebSocketTransport.factory,
                 logger: AVELogger = .silent) {
         self.config = configuration
@@ -151,10 +151,13 @@ public actor AVEWebSocketClient {
         transport = t
         do {
             try await t.open()
+            // Peut aller chercher un jeton frais auprès de l'hôte (WoYo, TaGa…) ; une erreur ici
+            // fait échouer la tentative, qui sera rejouée avec le backoff.
+            let token = try await tokenProvider()
             let hello = ClientMessage.Hello(
                 lang: config.lang, sampleRate: config.sampleRate,
                 sessionID: sessionID, lastSeq: sessionID == nil ? nil : lastSeq,
-                token: tokenProvider())
+                token: token)
             try await t.send(.text(ClientMessage.hello(hello).jsonString()))
             lastInbound = .now
             for try await message in t.incoming {

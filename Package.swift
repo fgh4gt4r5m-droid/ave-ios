@@ -7,16 +7,26 @@ import PackageDescription
 let package = Package(
     name: "AVECore",
     platforms: [.iOS(.v17), .macOS(.v14)],
-    products: [.library(name: "AVECore", targets: ["AVECore"])],
+    products: [
+        .library(name: "AVECore", targets: ["AVECore"]),
+        .library(name: "AVEKit", targets: ["AVEKit"]),
+    ],
     targets: [
         .target(
             name: "AVECore",
             path: "AVE",
-            sources: ["Domain", "Core/Network", "Core/Storage"]
+            exclude: ["Kit"],
+            sources: ["Domain", "Core/Network", "Core/Storage"]  // pur Foundation : pas d'UI, pas d'AVFoundation
+        ),
+        // AVEKit : brique intégrable (WoYo, TaGa…). Grossira avec l'audio, la session et l'UI partageable.
+        .target(
+            name: "AVEKit",
+            dependencies: ["AVECore"],
+            path: "AVE/Kit"
         ),
         .testTarget(
             name: "AVETests",
-            dependencies: ["AVECore"],
+            dependencies: ["AVECore", "AVEKit"],
             path: "AVETests"
         ),
     ]
