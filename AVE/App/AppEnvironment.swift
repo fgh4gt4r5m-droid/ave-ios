@@ -1,20 +1,27 @@
 import AVECore
 import Foundation
 
-/// Lit l'adresse du serveur dans l'Info.plist (alimentée par les .xcconfig, voir `Config/`).
-/// Aucune clé ni jeton ici.
+/// Lit la configuration dans l'Info.plist (alimentée par les .xcconfig, voir `Config/`). Aucune clé ni jeton ici.
 struct AppEnvironment {
     let endpoint: AVEEndpoint
     /// Identification envoyée dans `hello.client` (usage par application dans la console).
     let clientInfo: ClientInfo
+    /// Service de comptes (https). `nil` seulement en développement : l'app utilise alors le faux service DEBUG.
+    let accountsURL: URL?
+    let allowInsecureLocal: Bool
+    /// Indicatif sans « + » proposé pour les numéros saisis sans indicatif (ex. « 224 »). Optionnel.
+    let defaultCountryCode: String?
 
     static func load(bundle: Bundle = .main) throws -> AppEnvironment {
         guard let raw = bundle.object(forInfoDictionaryKey: "AVEEndpoint") as? String,
               let url = URL(string: raw) else { throw AVEEndpointError.invalidURL }
         let allowLocal = (bundle.object(forInfoDictionaryKey: "AVEAllowInsecureLocal") as? String) == "YES"
         let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let accounts = (bundle.object(forInfoDictionaryKey: "AVEAccountsURL") as? String).flatMap(URL.init(string:))
+        let country = (bundle.object(forInfoDictionaryKey: "AVEDefaultCountryCode") as? String).flatMap { $0.isEmpty ? nil : $0 }
         return AppEnvironment(
             endpoint: try AVEEndpoint(url, allowInsecureLocalNetwork: allowLocal),
-            clientInfo: ClientInfo(app: "ave-ios", version: version, sdk: "avekit"))
+            clientInfo: ClientInfo(app: "ave-ios", version: version, sdk: "avekit"),
+            accountsURL: accounts, allowInsecureLocal: allowLocal, defaultCountryCode: country)
     }
 }

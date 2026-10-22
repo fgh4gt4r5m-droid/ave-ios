@@ -40,3 +40,9 @@ l'intégration (WoYo/TaGa auront leur charte), compte utilisateur grand public (
 ## Limites connues
 Rien de ce code n'est compilé (pas de toolchain Swift dans l'environnement de dev). Un jeton introuvable fait
 échouer la tentative de connexion, rejouée avec le backoff (jusqu'à ce que l'hôte fournisse un jeton).
+
+## Connexion (grand public)
+Trois méthodes, aucune obligatoire : téléphone + code (SMS/WhatsApp), Sign in with Apple, invité (App Attest). Un service de comptes **dédié**
+(spécification : `contrat/CONTRAT.md` §6, non construit) garde la clé B2B et délivre des jetons AVE courts. Côté app : `Core/Auth`
+(`AccountsAPI`, `AuthSession` avec cache de jeton, `HTTPAccountsAPI`), `Features/Auth` (parcours et écrans). En DEBUG sans service configuré,
+l'app utilise `DevAccountsAPI` (faux, code « 000000 »). Les apps hôtes (WoYo, TaGa) ne l'utilisent pas : leur backend fournit le jeton.
