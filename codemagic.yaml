@@ -1,0 +1,88 @@
+# Codemagic : https://docs.codemagic.io/yaml-quick-start/building-a-native-ios-app/
+# Deux workflows : `ave-ci` (compile et teste, sans signature) et `ave-testflight` (manuel, nécessite la configuration Apple).
+workflows:
+  ave-ci:
+    name: "AVE - compilation et tests"
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      xcode: latest
+    triggering:
+      events: [push, pull_request]
+      branch_patterns:
+        - pattern: main
+          include: true
+        - pattern: "*"
+          include: true
+    scripts:
+      - name: "Version des outils"
+        script: |
+          xcodebuild -version
+          swift --version
+      - name: "Tests du package sur macOS (logique pure : protocole, client, audio, écrans, authentification)"
+        script: swift test --parallel
+      - name: "Installer XcodeGen"
+        script: brew install xcodegen
+      - name: "Générer le projet Xcode"
+        script: xcodegen generate
+      - name: "Compiler l'app (simulateur iOS, sans signature) : compile TOUT le code iOS (AVFoundation, SwiftUI, ActivityKit)"
+        script: |
+          set -o pipefail
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log || { echo '--- 80 dernières lignes ---'; tail -n 80 build.log; exit 1; }
+      - name: "Tests sur simulateur iOS"
+        script: |
+          set -o pipefail
+          DEVICE=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+[^(]*' | sed 's/ *$//')
+          echo "Simulateur : $DEVICE"
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Debug \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log || { echo '--- 80 dernières lignes ---'; tail -n 80 test.log; exit 1; }
+    artifacts:
+      - build.log
+      - test.log
+
+  ave-testflight:
+    name: "AVE - TestFlight (manuel)"
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    # À CONFIGURER avant usage : intégration App Store Connect nommée ci-dessous, identifiants d'app enregistrés chez Apple
+    # (fr.ave.app et fr.ave.app.liveactivity), capacités « Sign in with Apple » et « App Attest » activées sur l'identifiant,
+    # icône 1024 px dans Assets.xcassets. Les adresses réelles se passent en variables d'environnement (groupe « ave »).
+    integrations:
+      app_store_connect: AVE_ASC_KEY
+    environment:
+      groups:
+        - ave                       # AVE_ENDPOINT, AVE_ACCOUNTS_URL (adresses https/wss de production)
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: fr.ave.app
+      vars:
+        BUNDLE_ID: fr.ave.app
+    scripts:
+      - name: "Installer XcodeGen et générer le projet"
+        script: |
+          brew install xcodegen
+          xcodegen generate
+      - name: "Signature"
+        script: xcode-project use-profiles
+      - name: "Numéro de build"
+        script: |
+          BUILD=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          echo "BUILD_NUMBER=$((BUILD + 1))" >> "$CM_ENV"
+      - name: "Archive"
+        script: |
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release \
+            -archivePath build/AVE.xcarchive \
+            AVE_ENDPOINT="$AVE_ENDPOINT" AVE_ACCOUNTS_URL="$AVE_ACCOUNTS_URL" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive
+          xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa \
+            -exportOptionsPlist "$HOME/export_options.plist"
+    artifacts:
+      - build/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

@@ -155,7 +155,7 @@ Règles du client (`AVEWebSocketClient`) :
 
 ## État réel de l'app et écarts avec ce guide (mis à jour le 2026-10-22)
 
-Ce guide vient du dépôt du moteur (`docs/ios/CLAUDE.md`) ; ce qui suit décrit ce qui a été construit ici. **Rien du Swift n'a encore été compilé ni exécuté** (pas de toolchain Swift dans l'environnement de développement) : première étape = créer le projet Xcode, lancer `swift test` (Xcode 16+), corriger.
+Ce guide vient du dépôt du moteur (`docs/ios/CLAUDE.md`) ; ce qui suit décrit ce qui a été construit ici. **Rien du Swift n'a encore été compilé ni exécuté** (pas de toolchain Swift dans l'environnement de développement) : le projet Xcode est décrit par `project.yml` (XcodeGen) et compilé sur Codemagic (`codemagic.yaml`, voir `CODEMAGIC.md`) ; le premier build révélera les erreurs de compilation, à corriger à partir de ses journaux.
 
 **Dépôts** : moteur + contrat partagé = `african-voice-engine` (dossier `contrat/`, registre des extensions, vecteurs d'octets, journal) ; service de comptes = `ave-accounts` ; cette app = `ave-ios`. Tout changement de protocole commence dans le moteur, puis dans `contrat/`, puis ici.
 

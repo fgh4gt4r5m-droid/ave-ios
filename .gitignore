@@ -1,5 +1,11 @@
-.build/
+*.xcodeproj
 *.xcuserstate
-xcuserdata/
-DerivedData/
+*.xcworkspace
+.build/
 Config/Secrets.xcconfig
+DerivedData/
+build.log
+build/
+test.log
+xcuserdata/
+Config/AVELiveActivity-Info.plist

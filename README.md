@@ -26,6 +26,9 @@ une exception ATS **limitée à la configuration Debug** (`NSAllowsLocalNetworki
 - Logs : constantes, codes et compteurs uniquement (voir `AVELogger`).
 - Aucune clé dans le dépôt.
 
+## Compilation
+Pas de Mac nécessaire : voir `CODEMAGIC.md` (projet généré par XcodeGen, build et tests sur Codemagic).
+
 ## Dépôts
 - `african-voice-engine` : moteur + contrat partagé (`contrat/`).
 - `ave-accounts` : service de comptes (connexion, jetons courts).

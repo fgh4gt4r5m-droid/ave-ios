@@ -1,7 +1,0 @@
-// Copier en Debug.xcconfig (ignoré par git si vous y mettez autre chose que ce modèle).
-// Aucune clé ici : jamais de clé B2B ni de jeton dans la configuration de build.
-AVE_ENDPOINT = ws:/$()/192.168.1.10:8787/v1/stream
-AVE_ALLOW_INSECURE_LOCAL = YES
-// Service de comptes : vide en développement (l'app utilise alors le FAUX service DEBUG, code « 000000 »).
-AVE_ACCOUNTS_URL =
-AVE_DEFAULT_COUNTRY_CODE = 224

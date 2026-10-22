@@ -1,4 +1,0 @@
-AVE_ENDPOINT = wss:/$()/api.ave.example/v1/stream
-AVE_ALLOW_INSECURE_LOCAL = NO
-AVE_ACCOUNTS_URL = https:/$()/accounts.ave.example
-AVE_DEFAULT_COUNTRY_CODE = 224

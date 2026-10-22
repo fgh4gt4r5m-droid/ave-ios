@@ -1,0 +1,9 @@
+// Réglages DEBUG. Aucune clé, aucun jeton ici. Surcharges locales non committées : Config/Secrets.xcconfig (ignoré par git).
+// Astuce : « $()/ » évite que « // » soit lu comme un commentaire.
+AVE_ENDPOINT = ws:/$()/localhost:8787/v1/stream
+AVE_ALLOW_INSECURE_LOCAL = YES
+// Vide en développement : l'app utilise alors le FAUX service de comptes (DEBUG seulement, code « 000000 »).
+AVE_ACCOUNTS_URL =
+AVE_DEFAULT_COUNTRY_CODE = 224
+AVE_APPATTEST_ENV = development
+#include? "Secrets.xcconfig"
