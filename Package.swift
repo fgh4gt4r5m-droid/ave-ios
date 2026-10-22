@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 // Package SwiftPM du cœur testable (Domain + réseau + stockage). L'app SwiftUI, l'audio
 // et la Live Activity vivent dans la cible Xcode et ne sont pas dans ce package.
-// Lancer les tests sur Mac : `cd ios && swift test`
+// Lancer les tests sur Mac : `swift test`
 import PackageDescription
 
 let package = Package(
