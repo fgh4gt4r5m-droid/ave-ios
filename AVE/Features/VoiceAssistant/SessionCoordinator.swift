@@ -49,6 +49,13 @@ public final class SessionCoordinator {
     /// Messages ayant déjà reçu un 👍/👎 pendant cette session.
     public private(set) var feedbackGiven: Set<Int> = []
     public private(set) var selectedLanguage: AVELanguage
+    /// Type de compte de l'app AVE (`nil` : app hôte, WoYo/TaGa…). Un INVITÉ n'est pas sollicité pour l'apprentissage : sa clé de
+    /// consentement ne vit que le temps de la session, donc « effacer mes données » ne pourrait pas être tenu pour les sessions passées.
+    public var accountKind: AccountKind? {
+        didSet { if accountKind == .guest { learningPrompt = nil } }
+    }
+    /// Faux pour un invité : l'option n'est pas proposée (décision produit en attente, contrat §7).
+    public var learningOfferedToUser: Bool { accountKind != .guest }
 
     public var orbState: OrbState { OrbState(phase: phase, connection: connection) }
     public var supportsTextInput: Bool { configuration.supportsTextInput }
@@ -79,8 +86,10 @@ public final class SessionCoordinator {
 
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
                 configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil,
-                language: AVELanguage = .french, learningPreferences: any LearningPreferences = InMemoryLearningPreferences()) {
+                language: AVELanguage = .french, learningPreferences: any LearningPreferences = InMemoryLearningPreferences(),
+                accountKind: AccountKind? = nil) {
         self.activity = activity
+        self.accountKind = accountKind
         self.selectedLanguage = language
         self.learningPreferences = learningPreferences
         self.client = client
@@ -202,7 +211,7 @@ public final class SessionCoordinator {
 
     /// Rouvre la notice à la demande de l'utilisateur (réglages), même après un refus.
     public func presentLearningPrompt() {
-        guard let status = learning, status.available, !status.enabled,
+        guard learningOfferedToUser, let status = learning, status.available, !status.enabled,
               let text = LearningNotice.text(version: status.noticeVersion, language: selectedLanguage, in: configuration.learningNotices)
         else { return }
         learningPrompt = LearningPrompt(notice: text)
@@ -239,7 +248,7 @@ public final class SessionCoordinator {
 
     /// Montre la notice à un moment calme : session ouverte, au repos, après le premier tour terminé, une seule fois par session.
     private func evaluateLearningPrompt() {
-        guard learningPrompt == nil, phase == .idle, completedTurns >= configuration.learningPromptAfterTurns,
+        guard learningOfferedToUser, learningPrompt == nil, phase == .idle, completedTurns >= configuration.learningPromptAfterTurns,
               LearningConsent.shouldAsk(status: learning, language: selectedLanguage,
                                         declinedVersion: learningPreferences.declinedVersion,
                                         askedThisSession: askedLearningThisSession,

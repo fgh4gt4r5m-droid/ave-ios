@@ -67,7 +67,9 @@ public struct LearningSettingsView: View {
 
     public var body: some View {
         Section("Aider AVE à s'améliorer") {
-            if let status = coordinator.learning, status.available {
+            if !coordinator.learningOfferedToUser {
+                Text("Cette option est réservée aux utilisateurs avec un compte.")
+            } else if let status = coordinator.learning, status.available {
                 if status.enabled {
                     Label("Vous aidez AVE.", systemImage: "heart.fill")
                     Button("Retirer mon aide", role: .destructive) { confirmRevoke = true }.frame(minHeight: 44)

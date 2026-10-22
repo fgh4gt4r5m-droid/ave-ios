@@ -60,7 +60,9 @@ struct RootView: View {
             for await state in auth.states {
                 authState = state
                 switch state {
-                case .signedIn: if coordinator == nil { try buildCoordinator(env: env, auth: auth) }
+                case .signedIn(let kind):
+                    if coordinator == nil { try buildCoordinator(env: env, auth: auth, kind: kind) }
+                    coordinator?.accountKind = kind
                 case .signedOut:
                     if let coordinator { await coordinator.stop() }
                     coordinator = nil
@@ -83,13 +85,14 @@ struct RootView: View {
         #endif
     }
 
-    private func buildCoordinator(env: AppEnvironment, auth: AuthSession) throws {
+    private func buildCoordinator(env: AppEnvironment, auth: AuthSession, kind: AccountKind) throws {
         let configuration = AVEConfiguration(
             endpoint: env.endpoint, defaultLanguage: language.language,
             tokenProvider: auth.tokenProvider(), logger: .system, clientInfo: env.clientInfo)
         let client = configuration.makeClient(language: language.language)
         coordinator = SessionCoordinator(client: client, devices: try .system(),
                                          activity: SessionLiveActivityController(), language: language.language,
-                                         learningPreferences: UserDefaultsLearningPreferences())
+                                         learningPreferences: UserDefaultsLearningPreferences(),
+                                         accountKind: kind)
     }
 }

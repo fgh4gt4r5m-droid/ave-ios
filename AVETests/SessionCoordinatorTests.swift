@@ -417,6 +417,24 @@ struct LearningCoordinatorTests {
         }
     }
 
+    @Test("invité : jamais sollicité (l'effacement promis par la notice ne pourrait pas être tenu), même option masquée dans les réglages")
+    func guestNeverAsked() async throws {
+        let h = try Harness()
+        h.coordinator.accountKind = .guest
+        let t = try await h.open(learning: learningOffer)
+        await h.completeTurn(t)
+        await h.completeTurn(t, utterance: 6, seq: 10)
+        #expect(h.coordinator.learningPrompt == nil && !h.coordinator.learningOfferedToUser)
+        h.coordinator.presentLearningPrompt()  // même à la demande explicite
+        #expect(h.coordinator.learningPrompt == nil)
+        // Un invité qui crée un compte peut ensuite être sollicité.
+        h.coordinator.accountKind = .phone
+        #expect(h.coordinator.learningOfferedToUser)
+        h.coordinator.presentLearningPrompt()
+        #expect(h.coordinator.learningPrompt?.version == "2026-10-v1")
+        await h.coordinator.stop()
+    }
+
     @Test("serveur ancien (pas de ready.learning) : jamais de demande")
     func legacyServer() async throws {
         let h = try Harness()
