@@ -27,3 +27,9 @@
   « Réduire les animations » ; cibles ≥ 44 pt (conçues ainsi, non mesurées).
 - Contraste de la charte par défaut, mode sombre.
 - Info.plist : `AVEEndpoint`, `AVEAllowInsecureLocal`, `NSMicrophoneUsageDescription`.
+
+## Apprentissage et consentement (E15)
+Voir `contrat/CONTRAT.md` §7. Logique pure : `Features/Learning/LearningConsent.swift` (règles, notice versionnée, mémoire locale du refus) ;
+intégration : `SessionCoordinator` ; écrans : `LearningPromptView`, `LearningSettingsView`, 👍/👎 dans les bulles. À valider sur iPhone : lecture
+à voix haute (voix système fr-FR, interaction avec la session audio `.voiceChat`), VoiceOver (pas de double lecture), parcours d'un utilisateur qui ne lit pas.
+**Avant tout lancement : notice relue par un juriste et traduite par des natifs ; rôles de responsable de traitement et durée de conservation à fixer.**

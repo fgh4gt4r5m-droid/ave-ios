@@ -117,6 +117,31 @@ public actor AVEWebSocketClient {
         return true
     }
 
+    /// Réponse à la demande d'aide. Renvoie `false` si le message n'a pas pu partir (hors ligne).
+    @discardableResult
+    public func sendLearningConsent(granted: Bool, version: String) async -> Bool {
+        guard isReady, !version.isEmpty else { return false }
+        await send(message: .learningConsent(granted: granted, version: version))
+        return true
+    }
+
+    @discardableResult
+    public func revokeLearning() async -> Bool {
+        guard isReady else { return false }
+        await send(message: .learningRevoke)
+        return true
+    }
+
+    /// Retour 👍/👎 (correction ≤ 1000 caractères ; au-delà le serveur ferme la session avec `bad_feedback`, donc on refuse ici).
+    @discardableResult
+    public func sendFeedback(utteranceID: Int?, rating: FeedbackRating, correction: String? = nil) async -> Bool {
+        guard isReady else { return false }
+        let trimmed = correction?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, trimmed.count > 1000 { return false }
+        await send(message: .feedback(utteranceID: utteranceID, rating: rating, correction: (trimmed?.isEmpty ?? true) ? nil : trimmed))
+        return true
+    }
+
     /// Change la langue de la session ; mémorisée pour les reconnexions.
     public func setLanguage(_ new: AVELanguage) async {
         language = new

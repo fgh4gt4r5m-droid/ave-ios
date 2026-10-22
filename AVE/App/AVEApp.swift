@@ -34,7 +34,7 @@ struct RootView: View {
                         }
                         .accessibilityLabel("Mon compte")
                     }
-                    .sheet(isPresented: $showAccount) { AccountView(session: session) }
+                    .sheet(isPresented: $showAccount) { AccountView(session: session, coordinator: coordinator) }
             } else if let signIn {
                 SignInView(model: signIn)
             } else {
@@ -89,6 +89,7 @@ struct RootView: View {
             tokenProvider: auth.tokenProvider(), logger: .system, clientInfo: env.clientInfo)
         let client = configuration.makeClient(language: language.language)
         coordinator = SessionCoordinator(client: client, devices: try .system(),
-                                         activity: SessionLiveActivityController())
+                                         activity: SessionLiveActivityController(), language: language.language,
+                                         learningPreferences: UserDefaultsLearningPreferences())
     }
 }

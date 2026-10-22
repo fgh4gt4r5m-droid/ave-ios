@@ -9,6 +9,11 @@ public enum ClientMessage: Sendable, Equatable {
     /// Synthèse à la demande (≤ 1000 caractères), sans passer par le LLM.
     case speak(text: String, lang: AVELanguage?)
     case setLanguage(AVELanguage)
+    /// Réponse à la demande d'aide à l'amélioration. `version` = `notice_version` de la notice RÉELLEMENT affichée.
+    case learningConsent(granted: Bool, version: String)
+    /// Retire le consentement ET efface côté serveur ce qui a été gardé pour ce sujet.
+    case learningRevoke
+    case feedback(utteranceID: Int?, rating: FeedbackRating, correction: String?)
     case interrupt
     case ping(t: Double)
     case bye
@@ -45,6 +50,7 @@ extension ClientMessage: Encodable {
     private enum Keys: String, CodingKey {
         case type, version, codec, lang, sampleRate = "sample_rate", sessionID = "session_id"
         case lastSeq = "last_seq", token, meta, t, vad, client, text
+        case granted, version, utteranceID = "utterance_id", rating, correction
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -74,6 +80,17 @@ extension ClientMessage: Encodable {
         case .setLanguage(let lang):
             try c.encode("set_language", forKey: .type)
             try c.encode(lang, forKey: .lang)
+        case .learningConsent(let granted, let version):
+            try c.encode("learning_consent", forKey: .type)
+            try c.encode(granted, forKey: .granted)
+            try c.encode(version, forKey: .version)
+        case .learningRevoke:
+            try c.encode("learning_revoke", forKey: .type)
+        case .feedback(let utteranceID, let rating, let correction):
+            try c.encode("feedback", forKey: .type)
+            try c.encodeIfPresent(utteranceID, forKey: .utteranceID)
+            try c.encode(rating.rawValue, forKey: .rating)
+            try c.encodeIfPresent(correction, forKey: .correction)
         case .interrupt:
             try c.encode("interrupt", forKey: .type)
         case .ping(let t):
@@ -90,6 +107,10 @@ extension ClientMessage: Encodable {
         guard let s = String(data: data, encoding: .utf8) else { throw AVEProtocolError.invalidUTF8 }
         return s
     }
+}
+
+public enum FeedbackRating: String, Sendable, Equatable {
+    case up, down
 }
 
 public enum VADMode: String, Sendable, Equatable {

@@ -7,6 +7,7 @@ public struct ChatView: View {
     @Binding var language: AVELanguageSelection
     @State private var draft = ""
     @State private var showLanguages = false
+    @State private var correctionTarget: Int?
 
     public init(coordinator: SessionCoordinator, language: Binding<AVELanguageSelection>) {
         self.coordinator = coordinator
@@ -23,6 +24,19 @@ public struct ChatView: View {
         .sheet(isPresented: $showLanguages) {
             LanguagePicker(selection: $language, options: coordinator.languageOptions)
         }
+        .sheet(isPresented: Binding(get: { coordinator.learningPrompt != nil },
+                                    set: { if !$0 { coordinator.dismissLearningPrompt() } })) {
+            if let prompt = coordinator.learningPrompt {
+                LearningPromptView(prompt: prompt) { granted in Task { await coordinator.answerLearning(granted: granted) } }
+                    .presentationDetents([.large])
+            }
+        }
+        .sheet(isPresented: Binding(get: { correctionTarget != nil }, set: { if !$0 { correctionTarget = nil } })) {
+            FeedbackCorrectionView { correction in
+                if let id = correctionTarget { Task { await coordinator.sendFeedback(messageID: id, rating: .down, correction: correction) } }
+                correctionTarget = nil
+            }
+        }
         .onChange(of: language) { _, new in
             Task { await coordinator.setLanguage(new.language) }
         }
@@ -31,13 +45,16 @@ public struct ChatView: View {
     }
 
     @ViewBuilder private var banner: some View {
-        let text = coordinator.notice ?? UserMessages.connection(coordinator.connection)
+        let text = coordinator.notice ?? coordinator.learningMessage ?? UserMessages.connection(coordinator.connection)
         if let text {
             HStack {
                 Text(text).font(.footnote)
                 Spacer()
-                if coordinator.notice != nil {
-                    Button("Fermer", action: coordinator.dismissNotice).font(.footnote).frame(minHeight: 44)
+                if coordinator.notice != nil || coordinator.learningMessage != nil {
+                    Button("Fermer") {
+                        if coordinator.notice != nil { coordinator.dismissNotice() } else { coordinator.dismissLearningMessage() }
+                    }
+                    .font(.footnote).frame(minHeight: 44)
                 }
             }
             .padding(.horizontal)
@@ -55,6 +72,12 @@ public struct ChatView: View {
                             message: message,
                             canReplay: coordinator.hasCachedAudio(for: message.id),
                             isReplaying: coordinator.replayingMessageID == message.id,
+                            canFeedback: coordinator.canGiveFeedback,
+                            feedbackSent: coordinator.feedbackGiven.contains(message.id),
+                            onFeedback: { rating in
+                                if rating == .up { Task { await coordinator.sendFeedback(messageID: message.id, rating: .up) } }
+                                else { correctionTarget = message.id }
+                            },
                             onReplay: { coordinator.replay(messageID: message.id) },
                             onConfirm: { coordinator.confirmAction(messageID: message.id) },
                             onDecline: { coordinator.declineAction(messageID: message.id) })

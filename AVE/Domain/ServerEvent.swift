@@ -25,6 +25,11 @@ public enum ServerEvent: Sendable, Equatable {
     /// Détection de parole côté serveur (seulement avec `vad:"server"`) : ignorés par l'app (`vad:"client"`).
     case speechStart, speechEnd
     case languageSet(lang: String)
+    /// Réponse à `learning_consent` / `learning_revoke`. Non numéroté, non rejoué.
+    /// `reason` : granted | declined | revoked | not_available | stale_notice.
+    case learningState(enabled: Bool, reason: String, deleted: Int?, noticeVersion: String?)
+    /// `stored == false` : pas de consentement, le retour n'a pas été gardé.
+    case feedbackAck(stored: Bool)
     case unknown(type: String)
 
     public enum TranscriptSource: String, Sendable, Equatable { case voice, text }
@@ -39,6 +44,8 @@ public enum ServerEvent: Sendable, Equatable {
         public let graceSeconds: Double?
         /// Langues du registre avec leur disponibilité réelle. `nil` sur un serveur ancien.
         public let languages: [LanguageInfo]?
+        /// Apprentissage avec consentement. `nil` sur un serveur ancien : rien à demander.
+        public let learning: LearningStatus?
     }
 }
 
@@ -71,10 +78,10 @@ public struct ServerFrame: Sendable, Equatable {
             struct B: Decodable {
                 let session_id: String; let resumed: Bool; let last_mic_seq: UInt32
                 let seq: UInt32; let protocolVersion: Int
-                let graceSeconds: Double?; let languages: [LanguageInfo]?
+                let graceSeconds: Double?; let languages: [LanguageInfo]?; let learning: LearningStatus?
                 enum CodingKeys: String, CodingKey {
                     case session_id, resumed, last_mic_seq, seq, protocolVersion = "protocol"
-                    case graceSeconds = "grace_s", languages
+                    case graceSeconds = "grace_s", languages, learning
                 }
 
                 // Les champs ajoutés au fil des versions (grace_s est un FLOTTANT : 30.0, languages) ne
@@ -88,12 +95,13 @@ public struct ServerFrame: Sendable, Equatable {
                     protocolVersion = try c.decode(Int.self, forKey: .protocolVersion)
                     graceSeconds = try? c.decodeIfPresent(Double.self, forKey: .graceSeconds)
                     languages = try? c.decodeIfPresent([LanguageInfo].self, forKey: .languages)
+                    learning = try? c.decodeIfPresent(LearningStatus.self, forKey: .learning)
                 }
             }
             let b = try body(B.self)
             event = .ready(.init(sessionID: b.session_id, resumed: b.resumed, lastMicSeq: b.last_mic_seq,
                                  seq: b.seq, protocolVersion: b.protocolVersion,
-                                 graceSeconds: b.graceSeconds, languages: b.languages))
+                                 graceSeconds: b.graceSeconds, languages: b.languages, learning: b.learning))
         case "replayed":
             struct B: Decodable { let count: Int; let gap: Bool }
             let b = try body(B.self)
@@ -152,6 +160,23 @@ public struct ServerFrame: Sendable, Equatable {
             }
             let b = try body(B.self)
             event = .turnError(code: b.code, message: b.message ?? "", lang: b.lang, retryAfterSeconds: b.retry_after_s)
+        case "learning_state":
+            struct B: Decodable {
+                let enabled: Bool; let reason: String; let deleted: Int?; let notice_version: String?
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    enabled = try c.decode(Bool.self, forKey: .enabled)
+                    reason = try c.decode(String.self, forKey: .reason)
+                    deleted = try? c.decodeIfPresent(Int.self, forKey: .deleted)
+                    notice_version = try? c.decodeIfPresent(String.self, forKey: .notice_version)
+                }
+                enum CodingKeys: String, CodingKey { case enabled, reason, deleted, notice_version }
+            }
+            let b = try body(B.self)
+            event = .learningState(enabled: b.enabled, reason: b.reason, deleted: b.deleted, noticeVersion: b.notice_version)
+        case "feedback_ack":
+            struct B: Decodable { let stored: Bool }
+            event = .feedbackAck(stored: try body(B.self).stored)
         case "speech_start":
             event = .speechStart
         case "speech_end":

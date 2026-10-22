@@ -119,11 +119,13 @@ public struct SignInView: View {
 /// Déconnexion et suppression du compte (la suppression dans l'app est exigée par l'App Store).
 public struct AccountView: View {
     let session: AuthSession
+    let coordinator: SessionCoordinator?
     @State private var confirmDelete = false
     @State private var errorMessage: String?
 
-    public init(session: AuthSession) {
+    public init(session: AuthSession, coordinator: SessionCoordinator? = nil) {
         self.session = session
+        self.coordinator = coordinator
     }
 
     public var body: some View {
@@ -132,6 +134,7 @@ public struct AccountView: View {
                 Button("Se déconnecter") { Task { await session.signOut() } }.frame(minHeight: 44)
                 Button("Supprimer mon compte", role: .destructive) { confirmDelete = true }.frame(minHeight: 44)
             }
+            if let coordinator { LearningSettingsView(coordinator: coordinator) }
             if let errorMessage { Text(errorMessage).foregroundStyle(.orange) }
         }
         .confirmationDialog("Supprimer définitivement votre compte ?", isPresented: $confirmDelete, titleVisibility: .visible) {

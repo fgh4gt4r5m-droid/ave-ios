@@ -41,8 +41,10 @@ final class FakeWebSocketTransport: WebSocketTransport, @unchecked Sendable {
         continuation.yield(.binary(AudioFrame(kind: .tts, seq: seq, payload: payload).encoded()))
     }
     func serverDrop() { continuation.finish(throwing: OpenFailure()) }
-    func serverReady(session: String = "s1", resumed: Bool = false, lastMicSeq: UInt32 = 0, languages: String? = nil) {
-        let extra = languages.map { #","grace_s":30,"languages":\#($0)"# } ?? ""
+    func serverReady(session: String = "s1", resumed: Bool = false, lastMicSeq: UInt32 = 0, languages: String? = nil,
+                     learning: String? = nil) {
+        var extra = languages.map { #","grace_s":30,"languages":\#($0)"# } ?? ""
+        if let learning { extra += #","learning":\#(learning)"# }
         serverSend(#"{"type":"ready","session_id":"\#(session)","resumed":\#(resumed),"last_mic_seq":\#(lastMicSeq),"seq":0,"protocol":1\#(extra)}"#)
     }
 

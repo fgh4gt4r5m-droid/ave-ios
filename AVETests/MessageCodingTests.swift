@@ -52,12 +52,38 @@ struct MessageCodingTests {
         #expect(setLang["type"] as? String == "set_language" && setLang["lang"] as? String == "sus")
     }
 
+    @Test("apprentissage : consentement, retrait, avis")
+    func learningMessages() throws {
+        let yes = try object(.learningConsent(granted: true, version: "2026-10-v1"))
+        #expect(yes["type"] as? String == "learning_consent" && yes["granted"] as? Bool == true && yes["version"] as? String == "2026-10-v1")
+        #expect(try object(.learningRevoke)["type"] as? String == "learning_revoke")
+        let up = try object(.feedback(utteranceID: 5, rating: .up, correction: nil))
+        #expect(up["type"] as? String == "feedback" && up["utterance_id"] as? Int == 5 && up["rating"] as? String == "up" && up["correction"] == nil)
+        let down = try object(.feedback(utteranceID: nil, rating: .down, correction: "Il fallait dire autre chose"))
+        #expect(down["utterance_id"] == nil && down["rating"] as? String == "down" && down["correction"] as? String == "Il fallait dire autre chose")
+    }
+
+    @Test("apprentissage : learning_state, feedback_ack, ready.learning (tolérant)")
+    func learningEvents() throws {
+        #expect(try ServerFrame.decode(#"{"type":"learning_state","enabled":false,"reason":"revoked","deleted":3}"#)
+                == ServerFrame(seq: nil, event: .learningState(enabled: false, reason: "revoked", deleted: 3, noticeVersion: nil)))
+        #expect(try ServerFrame.decode(#"{"type":"learning_state","enabled":false,"reason":"stale_notice","notice_version":"v2"}"#).event
+                == .learningState(enabled: false, reason: "stale_notice", deleted: nil, noticeVersion: "v2"))
+        #expect(try ServerFrame.decode(#"{"type":"feedback_ack","stored":false}"#).event == .feedbackAck(stored: false))
+        let ready = #"{"type":"ready","session_id":"s","resumed":false,"last_mic_seq":0,"seq":0,"protocol":1,"learning":{"available":true,"enabled":false,"notice_version":"2026-10-v1"}}"#
+        guard case .ready(let r) = try ServerFrame.decode(ready).event else { Issue.record("pas ready"); return }
+        #expect(r.learning == LearningStatus(available: true, enabled: false, noticeVersion: "2026-10-v1"))
+        let broken = #"{"type":"ready","session_id":"s","resumed":false,"last_mic_seq":0,"seq":0,"protocol":1,"learning":{"available":"oui"}}"#
+        guard case .ready(let r2) = try ServerFrame.decode(broken).event else { Issue.record("ready illisible"); return }
+        #expect(r2.learning == nil && r2.sessionID == "s")  // un champ inattendu ne bloque jamais ready
+    }
+
     @Test("ready ancien : seq non porté, pas de langues")
     func readyLegacy() throws {
         let f = try ServerFrame.decode(#"{"type":"ready","session_id":"s","resumed":true,"last_mic_seq":9,"seq":4,"protocol":1}"#)
         #expect(f.seq == nil)
         #expect(f.event == .ready(.init(sessionID: "s", resumed: true, lastMicSeq: 9, seq: 4, protocolVersion: 1,
-                                        graceSeconds: nil, languages: nil)))
+                                        graceSeconds: nil, languages: nil, learning: nil)))
     }
 
     @Test("ready actuel : grace_s et langues avec disponibilité réelle")

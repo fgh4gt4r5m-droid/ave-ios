@@ -330,6 +330,29 @@ struct AVEWebSocketClientTests {
         await client.stop()
     }
 
+    @Test("apprentissage : consentement, retrait et avis, avec garde-fous avant l'envoi")
+    func learningMessages() async throws {
+        let f = FakeTransportFactory()
+        let client = try makeClient(factory: f)
+        await client.start()
+        #expect(await client.sendLearningConsent(granted: true, version: "v1") == false)  // pas prêt
+        let t = try #require(await f.waitForTransport(0))
+        t.serverReady()
+        #expect(await eventually { await client.isReadyForTests })
+        #expect(await client.sendLearningConsent(granted: true, version: "") == false)
+        #expect(await client.sendLearningConsent(granted: false, version: "v1") == true)
+        #expect(await client.revokeLearning() == true)
+        #expect(await client.sendFeedback(utteranceID: 4, rating: .up) == true)
+        #expect(await client.sendFeedback(utteranceID: 4, rating: .down, correction: String(repeating: "x", count: 1001)) == false)
+        #expect(await client.sendFeedback(utteranceID: 4, rating: .down, correction: "   ") == true)  // vide : omise
+        #expect(await eventually { t.sentJSON.filter { $0["type"] as? String == "feedback" }.count == 2 })
+        let feedback = t.sentJSON.filter { $0["type"] as? String == "feedback" }
+        #expect(feedback[1]["correction"] == nil)
+        #expect(t.sentJSON.contains { $0["type"] as? String == "learning_consent" && $0["granted"] as? Bool == false })
+        #expect(t.sentJSON.contains { $0["type"] as? String == "learning_revoke" })
+        await client.stop()
+    }
+
     @Test("ready : langues et grâce transmises à l'UI")
     func readyForwarded() async throws {
         let f = FakeTransportFactory()

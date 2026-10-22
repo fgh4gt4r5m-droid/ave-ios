@@ -5,6 +5,9 @@ struct MessageBubble: View {
     let message: ChatMessage
     let canReplay: Bool
     let isReplaying: Bool
+    var canFeedback = false
+    var feedbackSent = false
+    var onFeedback: (FeedbackRating) -> Void = { _ in }
     let onReplay: () -> Void
     let onConfirm: () -> Void
     let onDecline: () -> Void
@@ -35,6 +38,22 @@ struct MessageBubble: View {
                         .accessibilityLabel("Assistant : \(text)\(message.status == .interrupted ? ", interrompu" : "")")
                     if message.status == .interrupted {
                         Text("Interrompu").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if canFeedback, message.utteranceID != nil, message.status != .streaming {
+                        if feedbackSent {
+                            Text(UserMessages.feedbackThanks).font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            HStack(spacing: 4) {
+                                Button { onFeedback(.up) } label: {
+                                    Image(systemName: "hand.thumbsup").frame(width: 44, height: 44)
+                                }
+                                .accessibilityLabel("Bonne réponse")
+                                Button { onFeedback(.down) } label: {
+                                    Image(systemName: "hand.thumbsdown").frame(width: 44, height: 44)
+                                }
+                                .accessibilityLabel("Mauvaise réponse")
+                            }
+                        }
                     }
                     if canReplay {
                         Button(action: onReplay) {

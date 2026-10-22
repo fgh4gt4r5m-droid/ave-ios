@@ -21,6 +21,9 @@ public final class SessionCoordinator {
         public var supportsTextInput = true
         /// Plafond de mémoire pour l'audio mis en cache (« réécouter »).
         public var replayCacheBytes = 4_000_000
+        /// Nombre de tours terminés avant de proposer l'aide à l'amélioration (l'utilisateur a vu ce que fait l'app).
+        public var learningPromptAfterTurns = 1
+        public var learningNotices: [LearningNoticeText] = LearningNotice.all
 
         public init() {}
     }
@@ -37,6 +40,15 @@ public final class SessionCoordinator {
     public private(set) var replayingMessageID: Int?
     /// Langues avec leur disponibilité réelle (`ready.languages`), sinon la liste de repli.
     public private(set) var languageOptions: [LanguageOption] = LanguageCatalog.builtIn
+    /// État de l'apprentissage annoncé par le serveur (`ready.learning`), mis à jour par `learning_state`.
+    public private(set) var learning: LearningStatus?
+    /// Non `nil` : la notice doit être montrée (feuille modale). Le micro est ignoré tant qu'elle est visible.
+    public private(set) var learningPrompt: LearningPrompt?
+    /// Message à afficher après une action d'apprentissage (retrait, merci…).
+    public private(set) var learningMessage: String?
+    /// Messages ayant déjà reçu un 👍/👎 pendant cette session.
+    public private(set) var feedbackGiven: Set<Int> = []
+    public private(set) var selectedLanguage: AVELanguage
 
     public var orbState: OrbState { OrbState(phase: phase, connection: connection) }
     public var supportsTextInput: Bool { configuration.supportsTextInput }
@@ -47,6 +59,9 @@ public final class SessionCoordinator {
     @ObservationIgnored private let client: AVEWebSocketClient
     @ObservationIgnored private let devices: AudioDevices
     @ObservationIgnored private let configuration: Configuration
+    @ObservationIgnored private let learningPreferences: any LearningPreferences
+    @ObservationIgnored private var askedLearningThisSession = false
+    @ObservationIgnored private var completedTurns = 0
     @ObservationIgnored private let activity: (any SessionActivityPresenting)?
     @ObservationIgnored private var activityStarted = false
     @ObservationIgnored private var lastActivityPhase: LiveActivityPhase?
@@ -63,8 +78,11 @@ public final class SessionCoordinator {
     @ObservationIgnored private var replayCache: [(id: Int, chunks: [Data], bytes: Int)] = []
 
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
-                configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil) {
+                configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil,
+                language: AVELanguage = .french, learningPreferences: any LearningPreferences = InMemoryLearningPreferences()) {
         self.activity = activity
+        self.selectedLanguage = language
+        self.learningPreferences = learningPreferences
         self.client = client
         self.devices = devices
         self.mode = mode
@@ -160,7 +178,77 @@ public final class SessionCoordinator {
     }
 
     public func setLanguage(_ language: AVELanguage) async {
+        selectedLanguage = language
         await client.setLanguage(language)
+        evaluateLearningPrompt()
+    }
+
+    // MARK: Apprentissage avec consentement
+
+    /// Réponse de l'utilisateur à la notice affichée. Rien n'est coché d'avance ; un refus est mémorisé (pas de relance pour cette version).
+    public func answerLearning(granted: Bool) async {
+        guard let prompt = learningPrompt else { return }
+        // Si le message ne part pas (hors ligne), la notice reste affichée : on ne perd pas la réponse en silence.
+        guard await client.sendLearningConsent(granted: granted, version: prompt.version) else {
+            notice = UserMessages.notConnected
+            return
+        }
+        if !granted { learningPreferences.declinedVersion = prompt.version }
+        learningPrompt = nil
+    }
+
+    /// Ferme la notice sans répondre (retour arrière) : rien n'est envoyé, et on ne redemande pas pendant cette session.
+    public func dismissLearningPrompt() { learningPrompt = nil }
+
+    /// Rouvre la notice à la demande de l'utilisateur (réglages), même après un refus.
+    public func presentLearningPrompt() {
+        guard let status = learning, status.available, !status.enabled,
+              let text = LearningNotice.text(version: status.noticeVersion, language: selectedLanguage, in: configuration.learningNotices)
+        else { return }
+        learningPrompt = LearningPrompt(notice: text)
+    }
+
+    /// « Retirer mon aide » : retire le consentement ET efface côté serveur ce qui a été gardé.
+    public func revokeLearning() async {
+        guard await client.revokeLearning() else {
+            notice = UserMessages.notConnected
+            return
+        }
+        // Retirer son aide vaut refus de cette version : on ne la redemande pas.
+        if let version = learning?.noticeVersion { learningPreferences.declinedVersion = version }
+    }
+
+    public var canGiveFeedback: Bool { learning?.enabled == true }
+
+    /// 👍/👎 sur une réponse (correction facultative ≤ 1000 caractères). Seulement si l'utilisateur a consenti.
+    public func sendFeedback(messageID: Int, rating: FeedbackRating, correction: String? = nil) async {
+        guard canGiveFeedback, !feedbackGiven.contains(messageID),
+              let utteranceID = transcript.message(messageID)?.utteranceID else { return }
+        if (correction ?? "").trimmingCharacters(in: .whitespacesAndNewlines).count > 1000 {
+            notice = UserMessages.feedbackTooLong
+            return
+        }
+        if await client.sendFeedback(utteranceID: utteranceID, rating: rating, correction: correction) {
+            feedbackGiven.insert(messageID)
+        } else {
+            notice = UserMessages.notConnected
+        }
+    }
+
+    public func dismissLearningMessage() { learningMessage = nil }
+
+    /// Montre la notice à un moment calme : session ouverte, au repos, après le premier tour terminé, une seule fois par session.
+    private func evaluateLearningPrompt() {
+        guard learningPrompt == nil, phase == .idle, completedTurns >= configuration.learningPromptAfterTurns,
+              LearningConsent.shouldAsk(status: learning, language: selectedLanguage,
+                                        declinedVersion: learningPreferences.declinedVersion,
+                                        askedThisSession: askedLearningThisSession,
+                                        notices: configuration.learningNotices),
+              let status = learning,
+              let text = LearningNotice.text(version: status.noticeVersion, language: selectedLanguage, in: configuration.learningNotices)
+        else { return }
+        askedLearningThisSession = true
+        learningPrompt = LearningPrompt(notice: text)
     }
 
     public func confirmAction(messageID: Int) {
@@ -226,7 +314,7 @@ public final class SessionCoordinator {
     }
 
     private func handleMic(_ frame: MicFrame) async {
-        guard mode == .voice, micRunning else { return }
+        guard mode == .voice, micRunning, learningPrompt == nil else { return }
         micLevel = micSmoother.next(AudioLevel.normalized(rms: frame.rms))
         let audible = phase == .speaking || replayingMessageID != nil || !devices.player.isDrained
         switch vad.process(rms: frame.rms, assistantSpeaking: audible) {
@@ -266,6 +354,8 @@ public final class SessionCoordinator {
             }
         case .ready(let ready):
             languageOptions = LanguageCatalog.options(from: ready.languages)
+            learning = ready.learning
+            learningPrompt = nil  // une nouvelle session recalcule la situation
         case .audio(let data):
             handleAudio(data)
         case .replayGap(_, let gap):
@@ -293,12 +383,29 @@ public final class SessionCoordinator {
         case .turnEnd(_, let interrupted):
             await perform(machine.handle(.turnEnded(interrupted: interrupted)))
             transcript.apply(event)
+            if !interrupted { completedTurns += 1 }
         case .interrupted:
             await perform(machine.handle(.serverInterrupted))
             transcript.apply(event)
         case .turnError:
             await perform(machine.handle(.turnFailed))
             transcript.apply(event)
+        case .learningState(let enabled, let reason, let deleted, let noticeVersion):
+            if let current = learning {
+                learning = LearningStatus(available: current.available && reason != "not_available", enabled: enabled,
+                                          noticeVersion: noticeVersion ?? current.noticeVersion)
+            }
+            switch reason {
+            case "granted": learningMessage = UserMessages.learningThanks
+            case "revoked": learningMessage = UserMessages.learningRevoked(deleted: deleted)
+            case "stale_notice":
+                // Notice périmée : on ne montre une nouvelle demande que si on possède le texte EXACT de la nouvelle version.
+                askedLearningThisSession = false
+                learningPrompt = nil
+            default: break
+            }
+        case .feedbackAck(let stored):
+            if stored { learningMessage = UserMessages.feedbackThanks }
         case .action, .replyText, .transcript:
             if let auto = transcript.apply(event), let card = auto.card { onAction?(card) }
         default:
@@ -375,6 +482,7 @@ public final class SessionCoordinator {
     private func syncPhase() {
         phase = machine.phase
         refreshActivity()
+        evaluateLearningPrompt()
         if phase == .thinking {
             guard turnTimer == nil else { return }
             let timeout = configuration.turnTimeout

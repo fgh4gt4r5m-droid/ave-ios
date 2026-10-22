@@ -51,6 +51,13 @@ public enum UserMessages {
     public static let microphoneDenied = "Accès au micro refusé : le mode vocal est désactivé. Vous pouvez l'autoriser dans les Réglages."
     public static let audioUnavailable = "Impossible d'activer l'audio sur cet appareil."
     public static let textInputUnavailable = "La saisie de texte n'est pas disponible avec ce serveur."
+    public static func learningRevoked(deleted: Int?) -> String {
+        guard let deleted, deleted > 0 else { return "Votre aide a été retirée." }
+        return "Votre aide a été retirée. \(deleted) élément\(deleted > 1 ? "s" : "") effacé\(deleted > 1 ? "s" : "")."
+    }
+    public static let learningThanks = "Merci pour votre aide."
+    public static let feedbackThanks = "Merci pour votre avis."
+    public static let feedbackTooLong = "Votre correction est trop longue (1 000 caractères au maximum)."
     public static let notConnected = "Pas de connexion : message non envoyé. Réessayez dans un instant."
     public static let textTooLong = "Message trop long (4 000 caractères au maximum)."
 }

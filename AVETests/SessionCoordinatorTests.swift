@@ -67,7 +67,12 @@ struct Harness {
     let player = FakePlayer()
     let actions = ActionBox()
 
-    init(permission: Bool = true, turnTimeout: Duration = .seconds(30), activity: (any SessionActivityPresenting)? = nil) throws {
+    let preferences: InMemoryLearningPreferences
+
+    init(permission: Bool = true, turnTimeout: Duration = .seconds(30), activity: (any SessionActivityPresenting)? = nil,
+         language: AVELanguage = .french, preferences: InMemoryLearningPreferences = InMemoryLearningPreferences(),
+         notices: [LearningNoticeText] = LearningNotice.all) throws {
+        self.preferences = preferences
         guard let url = URL(string: "wss://ave.test/v1/stream") else { throw Bad() }
         let client = AVEWebSocketClient(
             configuration: .init(endpoint: try AVEEndpoint(url), lang: .french,
@@ -80,19 +85,20 @@ struct Harness {
         config.vad.absoluteThreshold = 500
         config.preRollFrames = 3
         config.turnTimeout = turnTimeout
+        config.learningNotices = notices
         coordinator = SessionCoordinator(
             client: client,
             devices: AudioDevices(mic: mic, player: player, lifecycle: FakeLifecycle(permission: permission)),
-            configuration: config, activity: activity)
+            configuration: config, activity: activity, language: language, learningPreferences: preferences)
         let box = actions
         coordinator.onAction = { card in box.add(card.name) }
     }
 
     /// Démarre la session et ouvre la connexion côté « serveur ».
-    func open(resumed: Bool = false) async throws -> FakeWebSocketTransport {
+    func open(resumed: Bool = false, learning: String? = nil) async throws -> FakeWebSocketTransport {
         await coordinator.start()
         let t = try #require(await factory.waitForTransport(0))
-        t.serverReady(resumed: resumed)
+        t.serverReady(resumed: resumed, learning: learning)
         #expect(await eventually { await coordinator.connection == .open(resumed: resumed) })
         return t
     }
@@ -104,6 +110,21 @@ struct Harness {
         _ = await eventually { await coordinator.phase == .listening }
         for _ in 0..<3 { mic.push(rms: 50) }
         _ = await eventually { await coordinator.phase == .thinking }
+    }
+}
+
+let learningOffer = #"{"available":true,"enabled":false,"notice_version":"2026-10-v1"}"#
+let learningOn = #"{"available":true,"enabled":true,"notice_version":"2026-10-v1"}"#
+
+@MainActor
+extension Harness {
+    /// Un tour complet côté serveur (sans audio) : écho, une phrase, fin de tour.
+    func completeTurn(_ t: FakeWebSocketTransport, utterance: Int = 5, seq: Int = 1) async {
+        t.serverSend(#"{"type":"transcript","seq":\#(seq),"text":"salut","lang":"fra","confidence":1,"speculative":false,"source":"text"}"#)
+        t.serverSend(#"{"type":"reply_text","seq":\#(seq + 1),"utterance_id":\#(utterance),"text":"Bonjour.","lang":"fra"}"#)
+        t.serverSend(#"{"type":"turn_end","seq":\#(seq + 2),"utterance_id":\#(utterance),"interrupted":false}"#)
+        _ = await eventually { await coordinator.transcript.messages.count >= 2 }
+        await settle(60)
     }
 }
 
@@ -329,5 +350,181 @@ struct SessionCoordinatorTests {
         #expect(await eventually { await h.coordinator.orbState == .unavailable })
         #expect(h.coordinator.notice == UserMessages.fatal(.unauthorized))
         await h.coordinator.stop()
+    }
+}
+
+@MainActor
+@Suite("Apprentissage et consentement")
+struct LearningCoordinatorTests {
+    private let v2 = LearningNoticeText(version: "2026-11-v2", languages: [.french], speechLanguageCode: "fr-FR",
+                                        title: "t", body: "b", yes: "o", no: "n")
+
+    @Test("la demande n'apparaît qu'après le premier tour terminé ; la réponse part avec la version AFFICHÉE")
+    func promptAfterFirstTurn() async throws {
+        let h = try Harness()
+        let t = try await h.open(learning: learningOffer)
+        await settle(60)
+        #expect(h.coordinator.learningPrompt == nil)  // pas avant d'avoir vu l'app fonctionner
+        await h.completeTurn(t)
+        #expect(await eventually { await h.coordinator.learningPrompt?.version == "2026-10-v1" })
+
+        await h.coordinator.answerLearning(granted: true)
+        #expect(h.coordinator.learningPrompt == nil)
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "learning_consent" } })
+        let sent = try #require(t.sentJSON.last { $0["type"] as? String == "learning_consent" })
+        #expect(sent["granted"] as? Bool == true && sent["version"] as? String == "2026-10-v1")
+
+        t.serverSend(#"{"type":"learning_state","enabled":true,"reason":"granted"}"#)
+        #expect(await eventually { await h.coordinator.learning?.enabled == true })
+        #expect(h.coordinator.learningMessage == UserMessages.learningThanks)
+        await h.coordinator.stop()
+    }
+
+    @Test("un refus est envoyé, mémorisé, et la même version n'est plus jamais redemandée")
+    func declineIsRemembered() async throws {
+        let prefs = InMemoryLearningPreferences()
+        let h = try Harness(preferences: prefs)
+        let t = try await h.open(learning: learningOffer)
+        await h.completeTurn(t)
+        #expect(await eventually { await h.coordinator.learningPrompt != nil })
+        await h.coordinator.answerLearning(granted: false)
+        #expect(prefs.declinedVersion == "2026-10-v1")
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "learning_consent" && $0["granted"] as? Bool == false } })
+        await h.coordinator.stop()
+
+        let h2 = try Harness(preferences: prefs)  // nouvelle session, même appareil
+        let t2 = try await h2.open(learning: learningOffer)
+        await h2.completeTurn(t2)
+        await h2.completeTurn(t2, utterance: 6, seq: 10)
+        #expect(h2.coordinator.learningPrompt == nil)
+        await h2.coordinator.stop()
+    }
+
+    @Test("rien n'est demandé si non disponible, déjà accepté, version inconnue ou langue sans notice")
+    func noPrompt() async throws {
+        let cases: [(String, AVELanguage)] = [
+            (#"{"available":false,"enabled":false,"notice_version":"2026-10-v1"}"#, .french),
+            (learningOn, .french),
+            (#"{"available":true,"enabled":false,"notice_version":"2099-01-v9"}"#, .french),
+            (learningOffer, .soussou),
+        ]
+        for (learning, language) in cases {
+            let h = try Harness(language: language)
+            let t = try await h.open(learning: learning)
+            await h.completeTurn(t)
+            #expect(h.coordinator.learningPrompt == nil, "\(learning) / \(language)")
+            await h.coordinator.stop()
+        }
+    }
+
+    @Test("serveur ancien (pas de ready.learning) : jamais de demande")
+    func legacyServer() async throws {
+        let h = try Harness()
+        let t = try await h.open()
+        await h.completeTurn(t)
+        #expect(h.coordinator.learning == nil && h.coordinator.learningPrompt == nil)
+        await h.coordinator.stop()
+    }
+
+    @Test("pas de relance dans la même session après fermeture sans réponse ; rien n'est envoyé")
+    func askedOnce() async throws {
+        let h = try Harness()
+        let t = try await h.open(learning: learningOffer)
+        await h.completeTurn(t)
+        #expect(await eventually { await h.coordinator.learningPrompt != nil })
+        h.coordinator.dismissLearningPrompt()
+        await h.completeTurn(t, utterance: 6, seq: 10)
+        #expect(h.coordinator.learningPrompt == nil)
+        #expect(!t.sentJSON.contains { $0["type"] as? String == "learning_consent" })
+        await h.coordinator.stop()
+    }
+
+    @Test("le micro est ignoré tant que la notice est affichée")
+    func micIgnoredWhilePrompt() async throws {
+        let h = try Harness()
+        let t = try await h.open(learning: learningOffer)
+        await h.completeTurn(t)
+        #expect(await eventually { await h.coordinator.learningPrompt != nil })
+        for _ in 0..<6 { h.mic.push(rms: 3000) }
+        await settle(150)
+        #expect(t.sentMicSeqs.isEmpty && h.coordinator.phase == .idle)
+        await h.coordinator.stop()
+    }
+
+    @Test("réponse hors ligne : la notice reste affichée, rien n'est perdu en silence")
+    func offlineAnswer() async throws {
+        let h = try Harness()
+        let t = try await h.open(learning: learningOffer)
+        await h.completeTurn(t)
+        #expect(await eventually { await h.coordinator.learningPrompt != nil })
+        t.serverDrop()
+        #expect(await eventually { await h.coordinator.connection != .open(resumed: false) })
+        await h.coordinator.answerLearning(granted: true)
+        #expect(h.coordinator.learningPrompt != nil && h.coordinator.notice == UserMessages.notConnected)
+        #expect(h.preferences.declinedVersion == nil)
+        await h.coordinator.stop()
+    }
+
+    @Test("notice périmée : nouvelle demande seulement si on possède le texte exact de la nouvelle version")
+    func staleNotice() async throws {
+        let h = try Harness(notices: LearningNotice.all + [v2])
+        let t = try await h.open(learning: learningOffer)
+        await h.completeTurn(t)
+        #expect(await eventually { await h.coordinator.learningPrompt != nil })
+        await h.coordinator.answerLearning(granted: true)
+        t.serverSend(#"{"type":"learning_state","enabled":false,"reason":"stale_notice","notice_version":"2026-11-v2"}"#)
+        #expect(await eventually { await h.coordinator.learningPrompt?.version == "2026-11-v2" })
+        await h.coordinator.stop()
+    }
+
+    @Test("retirer son aide : demande envoyée, éléments effacés annoncés, version non redemandée")
+    func revoke() async throws {
+        let h = try Harness()
+        let t = try await h.open(learning: learningOn)
+        await h.coordinator.revokeLearning()
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "learning_revoke" } })
+        t.serverSend(#"{"type":"learning_state","enabled":false,"reason":"revoked","deleted":3}"#)
+        #expect(await eventually { await h.coordinator.learning?.enabled == false })
+        #expect(h.coordinator.learningMessage?.contains("3 éléments effacés") == true)
+        #expect(h.preferences.declinedVersion == "2026-10-v1")
+        await h.coordinator.stop()
+    }
+
+    @Test("👍/👎 : seulement avec consentement, une fois par message, borné à 1000 caractères")
+    func feedback() async throws {
+        let h = try Harness()
+        let t = try await h.open(learning: learningOn)
+        await h.completeTurn(t, utterance: 5)
+        let message = try #require(h.coordinator.transcript.messages.last)
+        await h.coordinator.sendFeedback(messageID: message.id, rating: .up)
+        await h.coordinator.sendFeedback(messageID: message.id, rating: .down)  // déjà noté
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "feedback" } })
+        let sent = t.sentJSON.filter { $0["type"] as? String == "feedback" }
+        #expect(sent.count == 1 && sent[0]["utterance_id"] as? Int == 5 && sent[0]["rating"] as? String == "up")
+        #expect(h.coordinator.feedbackGiven.contains(message.id))
+
+        t.serverSend(#"{"type":"feedback_ack","stored":true}"#)
+        #expect(await eventually { await h.coordinator.learningMessage == UserMessages.feedbackThanks })
+        await h.coordinator.stop()
+    }
+
+    @Test("👍/👎 sans consentement ou correction trop longue : rien n'est envoyé")
+    func feedbackRefused() async throws {
+        let off = try Harness()
+        let t0 = try await off.open(learning: learningOffer)
+        await off.completeTurn(t0)
+        let m0 = try #require(off.coordinator.transcript.messages.last)
+        await off.coordinator.sendFeedback(messageID: m0.id, rating: .up)
+        #expect(!t0.sentJSON.contains { $0["type"] as? String == "feedback" })
+        await off.coordinator.stop()
+
+        let on = try Harness()
+        let t1 = try await on.open(learning: learningOn)
+        await on.completeTurn(t1)
+        let m1 = try #require(on.coordinator.transcript.messages.last)
+        await on.coordinator.sendFeedback(messageID: m1.id, rating: .down, correction: String(repeating: "a", count: 1001))
+        #expect(on.coordinator.notice == UserMessages.feedbackTooLong)
+        #expect(!t1.sentJSON.contains { $0["type"] as? String == "feedback" })
+        await on.coordinator.stop()
     }
 }
