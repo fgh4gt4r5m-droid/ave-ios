@@ -14,8 +14,9 @@ public final class URLSessionWebSocketTransport: WebSocketTransport, @unchecked 
 
     public init(url: URL, session: URLSession = .shared) {
         self.session = session
-        self.task = session.webSocketTask(with: url)
-        self.task.maximumMessageSize = 1 << 20
+        let task = session.webSocketTask(with: url)
+        task.maximumMessageSize = 1 << 20
+        self.task = task
         let (stream, continuation) = AsyncThrowingStream<TransportMessage, Error>.makeStream()
         self.incoming = stream
         self.continuation = continuation
