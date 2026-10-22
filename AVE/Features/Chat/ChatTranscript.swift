@@ -78,6 +78,12 @@ public struct ChatTranscript: Sendable, Equatable {
                                             utteranceID: utteranceID, voiceOnly: true)
             }
 
+        case .ttsEnd(_, true):
+            // Le moteur annonce la coupure par `tts_end {interrupted:true}` AVANT `interrupted` (PROTOCOL.md, barge-in) :
+            // la bulle est marquée dès ce premier signal, sans dépendre de l'arrivée des suivants (réseau instable).
+            // Un `tts_end` normal ne clôt rien : d'autres phrases du même tour peuvent suivre.
+            finishAssistant(.interrupted)
+
         case .turnEnd(_, let interrupted):
             finishAssistant(interrupted ? .interrupted : .complete)
 

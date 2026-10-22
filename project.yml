@@ -48,11 +48,15 @@ targets:
   AVELiveActivity:
     type: app-extension
     platform: iOS
+    # Pas de dépendance au package : si l'app lie AVECore + AVEKit et l'extension AVEKit seul, Xcode veut construire
+    # les cibles partagées en dynamique et échoue (« cannot be built dynamically because there is a package product
+    # with the same name »). Les trois fichiers sans dépendance utiles au widget sont compilés ici directement
+    # (modèle d'Apple pour les attributs d'une Live Activity, partagés par nom de type).
     sources:
       - path: AVE/LiveActivity
-    dependencies:
-      - package: AVEPackage
-        product: AVEKit
+      - path: AVE/Kit/AVESessionAttributes.swift
+      - path: AVE/Kit/AVEPalette.swift
+      - path: AVE/Features/VoiceAssistant/LiveActivityPhase.swift
     info:
       path: Config/AVELiveActivity-Info.plist
       properties:

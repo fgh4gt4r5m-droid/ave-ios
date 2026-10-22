@@ -1,4 +1,5 @@
 #if os(iOS)
+import AVECore
 import SwiftUI
 
 /// Écran de conversation : bulles, cartes d'action, orbe vocal, bascule voix ↔ texte.

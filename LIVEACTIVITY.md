@@ -4,8 +4,11 @@
 - `AVEKit` : `AVESessionAttributes` (partagé app + extension), `LiveActivityPhase` (pur), port `SessionActivityPresenting`,
   `SessionLiveActivityController` (ActivityKit). `SessionCoordinator` la démarre à l'ouverture de la session, ne lui envoie que les **changements**
   d'état, et l'arrête quand la session est perdue ou terminée.
-- `AVE/LiveActivity/AVELiveActivityWidget.swift` : interface (écran verrouillé, Dynamic Island compacte/étendue/minimale). À ajouter à une **cible
-  extension Widget** qui lie AVEKit (non créée : pas de projet Xcode dans le dépôt).
+- `AVE/LiveActivity/AVELiveActivityWidget.swift` : interface (écran verrouillé, Dynamic Island compacte/étendue/minimale), cible
+  **extension Widget** `AVELiveActivity` de `project.yml`. L'extension **ne lie pas AVEKit** : elle compile directement
+  `AVESessionAttributes.swift`, `LiveActivityPhase.swift` et `AVEPalette.swift` (sans dépendance). Lier le package depuis l'app
+  (AVECore + AVEKit) et depuis l'extension (AVEKit) fait échouer Xcode ; ActivityKit associe les deux côtés par le nom du type.
+  Ce qui dépend du reste d'AVEKit (`LiveActivityPhase(orb:)`, `SessionActivityPresenting`) est dans `SessionActivityPresenting.swift`.
 - Mises à jour **locales** uniquement (pas de push en v1). Aucun texte de conversation n'est affiché (visible sans déverrouiller).
 
 ## Branchement dans l'app

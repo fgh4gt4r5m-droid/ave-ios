@@ -2,9 +2,12 @@
 import ActivityKit
 import Foundation
 
-/// Attributs de la Live Activity. Partagés par l'app et l'extension Widget (les deux importent AVEKit).
-public struct AVESessionAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
+/// Attributs de la Live Activity. Ce fichier est compilé dans AVEKit (côté app) ET directement dans l'extension
+/// Widget, qui ne lie pas AVEKit : c'est le modèle d'Apple (ActivityKit associe les deux par le nom du type).
+/// Lier le même package depuis l'app et l'extension par des produits différents fait échouer Xcode.
+/// `Sendable` explicite : les types publics ne l'obtiennent pas implicitement et ActivityKit transmet ces valeurs.
+public struct AVESessionAttributes: ActivityAttributes, Sendable {
+    public struct ContentState: Codable, Hashable, Sendable {
         public var phaseRaw: String
         public init(phaseRaw: String) { self.phaseRaw = phaseRaw }
     }

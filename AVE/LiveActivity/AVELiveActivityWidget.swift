@@ -1,7 +1,7 @@
-// Cible « extension Widget » (non incluse dans le package SwiftPM) : à ajouter à la cible Xcode
-// de l'extension, qui doit lier AVEKit. Voir ios/LIVEACTIVITY.md.
+// Cible « extension Widget » (non incluse dans le package SwiftPM). Elle ne lie PAS AVEKit : `project.yml` compile ici
+// directement AVESessionAttributes.swift, LiveActivityPhase.swift et AVEPalette.swift (fichiers sans dépendance).
+// Voir LIVEACTIVITY.md.
 import ActivityKit
-import AVEKit
 import SwiftUI
 import WidgetKit
 
@@ -13,9 +13,9 @@ struct AVEWidgets: WidgetBundle {
 struct AVELiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: AVESessionAttributes.self) { context in
-            LockScreenView(phase: phase(context.state), startedAt: context.attributes.startedAt)
+            LockScreenView(phase: livePhase(context.state), startedAt: context.attributes.startedAt)
         } dynamicIsland: { context in
-            let current = phase(context.state)
+            let current = livePhase(context.state)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Image(systemName: current.symbolName).font(.title2).accessibilityHidden(true)
@@ -42,9 +42,18 @@ struct AVELiveActivityWidget: Widget {
             .keylineTint(Color(AVEPalette.blue))
         }
     }
+}
 
-    private func phase(_ state: AVESessionAttributes.ContentState) -> LiveActivityPhase {
-        LiveActivityPhase(rawValue: state.phaseRaw) ?? .idle
+/// Fonction libre (non isolée) plutôt que méthode du widget : les closures d'`ActivityConfiguration` ne sont pas
+/// forcément isolées à l'acteur principal, alors qu'une méthode d'un `Widget` l'est.
+private func livePhase(_ state: AVESessionAttributes.ContentState) -> LiveActivityPhase {
+    LiveActivityPhase(rawValue: state.phaseRaw) ?? .idle
+}
+
+/// Même conversion que dans AVEKit (`AVETheme.swift`), qui n'est pas lié à cette extension.
+private extension Color {
+    init(_ c: AVEColor) {
+        self.init(red: Double(c.red) / 255, green: Double(c.green) / 255, blue: Double(c.blue) / 255)
     }
 }
 

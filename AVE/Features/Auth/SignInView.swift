@@ -1,4 +1,5 @@
 #if os(iOS)
+import AVECore
 import AuthenticationServices
 import CryptoKit
 import Security

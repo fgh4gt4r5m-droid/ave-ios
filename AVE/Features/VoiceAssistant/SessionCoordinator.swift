@@ -384,6 +384,7 @@ public final class SessionCoordinator {
         case .ttsEnd(_, let interrupted):
             let id = transcript.currentAssistantID
             await perform(machine.handle(.ttsEnded(interrupted: interrupted)))
+            transcript.apply(event)
             if !interrupted {
                 devices.player.endOfUtterance()
                 if let id { cache(chunks: utteranceChunks, for: id) }

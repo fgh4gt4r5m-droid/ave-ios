@@ -71,6 +71,17 @@ struct ChatTranscriptTests {
         #expect(t.currentAssistantID == nil)
     }
 
+    @Test("tts_end interrompu : bulle interrompue ; tts_end normal : le tour reste ouvert")
+    func ttsEndInterrupted() {
+        var t = ChatTranscript()
+        t.apply(.replyText(utteranceID: 1, text: "Première phrase.", lang: "fra"))
+        t.apply(.ttsEnd(utteranceID: 1, interrupted: false))
+        #expect(t.messages[0].status == .streaming && t.currentAssistantID == t.messages[0].id)
+        t.apply(.ttsEnd(utteranceID: 1, interrupted: true))
+        #expect(t.messages[0].status == .interrupted)
+        #expect(t.currentAssistantID == nil)
+    }
+
     @Test("turn_error : message système honnête, rate_limited compris")
     func turnError() {
         var t = ChatTranscript()

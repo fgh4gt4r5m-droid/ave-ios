@@ -1,4 +1,5 @@
 #if os(iOS)
+import AVECore
 import SwiftUI
 
 struct MessageBubble: View {

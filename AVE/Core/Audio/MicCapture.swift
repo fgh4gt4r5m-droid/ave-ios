@@ -105,19 +105,33 @@ private struct MicConverter {
 
         let capacity = AVAudioFrameCount(Double(samples.count) * target.sampleRate / sampleRate) + 32
         guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return [] }
-        var supplied = false
         var error: NSError?
+        let feed = OneShotInput(input)
         let status = converter.convert(to: output, error: &error) { _, inputStatus in
-            if supplied {
+            guard let buffer = feed.take() else {
                 inputStatus.pointee = .noDataNow
                 return nil
             }
-            supplied = true
             inputStatus.pointee = .haveData
-            return input
+            return buffer
         }
         guard status != .error, error == nil, let data = output.int16ChannelData else { return [] }
         return Array(UnsafeBufferPointer(start: data[0], count: Int(output.frameLength)))
+    }
+}
+
+/// Tampon d'entrée livré une seule fois au convertisseur. Le bloc d'entrée d'`AVAudioConverter` peut être déclaré
+/// `@Sendable` par le SDK : il ne peut alors ni modifier une variable capturée ni capturer un `AVAudioPCMBuffer`.
+/// `convert` l'appelle de façon SYNCHRONE, dans la tâche qui convertit : aucun accès concurrent réel, d'où le
+/// `@unchecked Sendable`.
+private final class OneShotInput: @unchecked Sendable {
+    private var buffer: AVAudioPCMBuffer?
+
+    init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+
+    func take() -> AVAudioPCMBuffer? {
+        defer { buffer = nil }
+        return buffer
     }
 }
 #endif

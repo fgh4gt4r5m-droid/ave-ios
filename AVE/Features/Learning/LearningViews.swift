@@ -1,4 +1,5 @@
 #if os(iOS)
+import AVECore
 import SwiftUI
 
 /// Demande d'aide à l'amélioration. « Non » et « Oui » ont le même poids visuel, rien n'est présélectionné,
