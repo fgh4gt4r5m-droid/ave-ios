@@ -257,7 +257,8 @@ struct SessionCoordinatorTests {
         #expect(await eventually { await h.coordinator.phase == .speaking })
         await h.coordinator.sendText("stop")
         #expect(h.player.purges >= 1)
-        #expect(await h.coordinator.phase == .thinking)
+        // Suite @MainActor : `phase` se lit sans `await` (le compilateur le signalait comme inutile).
+        #expect(h.coordinator.phase == .thinking)
         #expect(!t.sentJSON.contains { $0["type"] as? String == "interrupt" })
         await h.coordinator.stop()
     }

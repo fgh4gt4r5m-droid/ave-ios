@@ -390,7 +390,9 @@ struct SignInViewModelTests {
     func apple() async {
         let (vm, session, api) = make()
         await vm.signInWithApple(identityToken: "jeton", rawNonce: "n")
-        #expect(api.calls == ["apple"] && await session.state == .signedIn(.apple))
+        // Deux vérifications : `await` est interdit à droite de `&&` (l'opérande droite est une autoclosure synchrone).
+        #expect(api.calls == ["apple"])
+        #expect(await session.state == .signedIn(.apple))
         let (v2, _, _) = make()
         v2.appleCancelled()
         #expect(v2.errorMessage == nil)
