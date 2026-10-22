@@ -140,6 +140,8 @@ public struct AccountView: View {
         .confirmationDialog("Supprimer définitivement votre compte ?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Supprimer", role: .destructive) {
                 Task {
+                    // Efface d'abord côté moteur ce qui a été gardé pour l'apprentissage : le service de comptes ne peut pas le faire.
+                    if let coordinator, coordinator.learning?.enabled == true { await coordinator.revokeLearning() }
                     do { try await session.deleteAccount() } catch {
                         errorMessage = AuthMessages.message(for: (error as? AuthError) ?? .unavailable)
                     }
