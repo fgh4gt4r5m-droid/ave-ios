@@ -50,7 +50,8 @@ extension ClientMessage: Encodable {
     private enum Keys: String, CodingKey {
         case type, version, codec, lang, sampleRate = "sample_rate", sessionID = "session_id"
         case lastSeq = "last_seq", token, meta, t, vad, client, text
-        case granted, version, utteranceID = "utterance_id", rating, correction
+        // `version` (déjà déclaré ci-dessus) sert aussi à `learning_consent` : même clé JSON.
+        case granted, utteranceID = "utterance_id", rating, correction
     }
 
     public func encode(to encoder: Encoder) throws {
