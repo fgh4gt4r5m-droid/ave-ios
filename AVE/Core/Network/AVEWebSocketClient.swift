@@ -12,10 +12,13 @@ public actor AVEWebSocketClient {
         /// Sans trame reçue depuis ce délai, la connexion est jugée morte et recréée. `nil` = désactivé.
         public var deadPeerTimeout: Duration?
         public var micQueueCapacity: Int
+        public var clientInfo: ClientInfo?
 
         public init(endpoint: AVEEndpoint, lang: AVELanguage = .auto, sampleRate: Int = 16_000,
                     backoff: Backoff = Backoff(), pingInterval: Duration = .seconds(15),
-                    deadPeerTimeout: Duration? = .seconds(45), micQueueCapacity: Int = 500) {
+                    deadPeerTimeout: Duration? = .seconds(45), micQueueCapacity: Int = 500,
+                    clientInfo: ClientInfo? = nil) {
+            self.clientInfo = clientInfo
             self.endpoint = endpoint
             self.lang = lang
             self.sampleRate = sampleRate
@@ -43,6 +46,7 @@ public actor AVEWebSocketClient {
     private var isReady = false
     private var fatal: AVEFatalError?
 
+    private var language: AVELanguage
     private var sessionID: String?
     private var lastSeq: UInt32 = 0
     private var micSeq: UInt32 = 0
@@ -57,6 +61,7 @@ public actor AVEWebSocketClient {
                 transportFactory: @escaping TransportFactory = URLSessionWebSocketTransport.factory,
                 logger: AVELogger = .silent) {
         self.config = configuration
+        self.language = configuration.lang
         self.tokenProvider = tokenProvider
         self.transportFactory = transportFactory
         self.log = logger
@@ -93,6 +98,29 @@ public actor AVEWebSocketClient {
         } else if !stopped, fatal == nil {
             pendingEndOfSpeech.append((micSeq, meta))  // partira après le renvoi de l'audio manquant
         }
+    }
+
+    /// Envoie un message texte (1–4000 caractères). Renvoie `false` s'il n'a pas pu partir (hors ligne,
+    /// vide ou trop long) : l'appelant doit le dire à l'utilisateur, pas le perdre en silence.
+    @discardableResult
+    public func sendText(_ text: String) async -> Bool {
+        guard isReady, (1...4000).contains(text.count) else { return false }
+        await send(message: .text(text))
+        return true
+    }
+
+    /// Synthèse à la demande (≤ 1000 caractères).
+    @discardableResult
+    public func speak(_ text: String, lang: AVELanguage? = nil) async -> Bool {
+        guard isReady, (1...1000).contains(text.count) else { return false }
+        await send(message: .speak(text: text, lang: lang))
+        return true
+    }
+
+    /// Change la langue de la session ; mémorisée pour les reconnexions.
+    public func setLanguage(_ new: AVELanguage) async {
+        language = new
+        if isReady { await send(message: .setLanguage(new)) }
     }
 
     /// Hors ligne, un `interrupt` est périmé à la reconnexion : on ne le met pas en file.
@@ -148,9 +176,9 @@ public actor AVEWebSocketClient {
             // fait échouer la tentative, qui sera rejouée avec le backoff.
             let token = try await tokenProvider()
             let hello = ClientMessage.Hello(
-                lang: config.lang, sampleRate: config.sampleRate,
+                lang: language, sampleRate: config.sampleRate,
                 sessionID: sessionID, lastSeq: sessionID == nil ? nil : lastSeq,
-                token: token)
+                token: token, vad: .client, client: config.clientInfo)
             try await t.send(.text(ClientMessage.hello(hello).jsonString()))
             lastInbound = .now
             for try await message in t.incoming {
@@ -200,6 +228,7 @@ public actor AVEWebSocketClient {
         switch event {
         case .ready(let r):
             await handleReady(r)
+            eventsOut.yield(.ready(r))
             eventsOut.yield(.state(.open(resumed: r.resumed)))
         case .replayed(let count, let gap):
             eventsOut.yield(.replayGap(count: count, gap: gap))

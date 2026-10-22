@@ -9,16 +9,17 @@
 - Les vues SwiftUI sont sous `#if os(iOS)` ; la logique est testable partout.
 
 ## Décisions à connaître
-1. **Confirmation des actions** : exigée sauf si le serveur envoie explicitement `confirm: false`. Le serveur actuel
-   n'envoie pas ce champ ; exécuter `order_ride` sans accord serait dangereux. À confirmer au contrat (Q1).
-2. **Mode texte** : la saisie est désactivée avec une explication, car le protocole n'a pas de message pour le texte (E13).
-   Rien n'est simulé.
-3. **Texte des réponses** : sans `reply_text` (E3), la bulle affiche « Réponse vocale » avec « Réécouter ». Dès que
-   `reply_text` existe, la bulle se construit phrase par phrase.
-4. **Réécouter** : rejoue l'audio gardé en mémoire (4 Mo max, les plus anciens sortent d'abord), faute de message `speak` (E7).
-5. **Langues** : liste en dur ; seul le français (et la détection, qui ne comprend que le français) est annoncé disponible.
-   Les autres sont sélectionnables mais clairement signalées « pas encore disponible ». Aucune promesse de latence.
-6. **Un seul flux d'événements** (état, protocole, audio) côté client : l'ordre est garanti.
+1. **Confirmation des actions** : `action.confirm == true` ⇒ carte « Confirmer / Refuser » ; la voix seule ne valide jamais. `confirm == false`
+   ⇒ l'action est rendue tout de suite à l'app hôte (`onAction`). Un `confirm` absent est traité comme `true`. Le serveur n'attend aucune réponse.
+2. **Texte** : `text` envoyé tel quel (après `trim`, 1–4000 caractères). La bulle de l'utilisateur apparaît à l'écho `transcript {source:"text"}`, comme pour
+   la voix : l'app n'en fabrique pas. Hors ligne, le message n'est pas perdu en silence : l'utilisateur est prévenu. Envoyer du texte pendant que l'assistant
+   parle purge la lecture localement (le serveur coupe seul).
+3. **Texte de la réponse** : bulle construite phrase par phrase par `utterance_id` (`reply_text`). Sans `reply_text`, bulle « Réponse vocale ».
+4. **Réécouter** : rejoue l'audio gardé en mémoire (4 Mo max, plus anciens évincés). `speak` existe côté client mais n'a pas d'écran.
+5. **Langues** : liste du serveur (`ready.languages`, disponibilité réelle) ; repli codé en dur si absente. Les langues indisponibles sont sélectionnables
+   mais signalées. Aucune promesse de latence.
+6. **`vad:"client"`** : voir `contrat/CONTRAT.md` §3 bis. **Un seul flux d'événements** côté client (état, ready, protocole, audio) : l'ordre est garanti.
+7. **Honnêteté** : la voix reçue est aujourd'hui un son de test et le dialogue un écho (dit par le serveur). L'UI ne doit pas laisser croire le contraire.
 
 ## À valider dans Xcode / sur iPhone (rien n'a été compilé ni vu à l'écran)
 - Compilation de toutes les vues et des macros `@Observable`.

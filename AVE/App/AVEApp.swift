@@ -39,7 +39,8 @@ struct RootView: View {
                 endpoint: environment.endpoint,
                 defaultLanguage: language.language,
                 tokenProvider: { tokens.readToken() },
-                logger: .system)
+                logger: .system,
+                clientInfo: environment.clientInfo)
             let client = configuration.makeClient(language: language.language)
             coordinator = SessionCoordinator(client: client, devices: try .system())
         } catch {

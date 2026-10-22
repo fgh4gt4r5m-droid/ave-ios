@@ -22,6 +22,10 @@ public struct BargeInStateMachine: Sendable, Equatable {
         case turnFailed
         /// Connexion perdue ou session arrêtée.
         case sessionLost
+        /// `turn_end` reçu : clôt un tour, y compris sans audio (mode texte).
+        case turnEnded(interrupted: Bool)
+        /// L'utilisateur a envoyé un message texte (le serveur le traite comme un barge-in si besoin).
+        case userSentText
         /// Coupure volontaire (bouton, passage en mode texte, appel entrant) : l'utilisateur ne parle pas.
         case manualInterrupt
     }
@@ -47,6 +51,14 @@ public struct BargeInStateMachine: Sendable, Equatable {
         case (.idle, .ttsStarted):  // réponse à la demande (lecture sans question préalable)
             phase = .speaking
 
+        // Texte envoyé : on attend la réponse. Si l'assistant parlait, on purge localement
+        // (le serveur interrompt de lui-même sur `text` : pas de `interrupt` à envoyer).
+        case (.speaking, .userSentText):
+            phase = .thinking
+            return [.purgePlayback]
+        case (_, .userSentText):
+            phase = .thinking
+
         case (.listening, .userSpeechEnded):
             phase = .thinking
             return [.sendEndOfSpeech]
@@ -57,6 +69,10 @@ public struct BargeInStateMachine: Sendable, Equatable {
             phase = .listening
         case (.thinking, .turnFailed):
             phase = .idle
+        // Fin de tour sans audio (réponse texte) ou réponse vide. Un `turn_end(interrupted:true)` en
+        // réflexion est le reliquat du tour que l'utilisateur vient de couper : ignoré.
+        case (.thinking, .turnEnded(let interrupted)):
+            if !interrupted { phase = .idle }
 
         case (.speaking, .userSpeechStarted):  // BARGE-IN
             phase = .interrupted
@@ -70,6 +86,8 @@ public struct BargeInStateMachine: Sendable, Equatable {
         case (.speaking, .manualInterrupt):
             phase = .idle
             return [.purgePlayback, .sendInterrupt]
+        case (.speaking, .turnEnded):  // `tts_end` manqué : on ne bloque pas l'état
+            phase = .idle
         case (.speaking, .turnFailed):
             phase = .idle
             return [.purgePlayback]

@@ -5,75 +5,113 @@ import Testing
 
 @Suite("ChatTranscript")
 struct ChatTranscriptTests {
-    @Test("réponse construite phrase par phrase via reply_text")
+    private func transcript(_ text: String, source: ServerEvent.TranscriptSource = .voice, speculative: Bool = false) -> ServerEvent {
+        .transcript(text: text, lang: "fra", confidence: 1, speculative: speculative, source: source)
+    }
+
+    @Test("réponse construite phrase par phrase via reply_text, par utterance_id")
     func sentenceBySentence() {
         var t = ChatTranscript()
-        t.apply(.transcript(text: "bonjour", lang: "fra", confidence: 1))
-        t.apply(.replyText(text: "Bonjour !"))
-        t.apply(.replyText(text: "Comment puis-je aider ?"))
-        t.apply(.ttsEnd(utteranceID: 1, interrupted: false))
+        t.apply(transcript("bonjour"))
+        t.apply(.replyText(utteranceID: 2, text: "Bonjour !", lang: "fra"))
+        t.apply(.replyText(utteranceID: 2, text: "Comment puis-je aider ?", lang: "fra"))
+        t.apply(.turnEnd(utteranceID: 2, interrupted: false))
         #expect(t.messages.count == 2)
         #expect(t.messages[0].role == .user && t.messages[0].text == "bonjour")
         #expect(t.messages[1].text == "Bonjour ! Comment puis-je aider ?")
         #expect(t.messages[1].status == .complete && !t.messages[1].isVoiceOnly)
     }
 
+    @Test("deux tours = deux bulles assistant distinctes")
+    func twoTurns() {
+        var t = ChatTranscript()
+        t.apply(.replyText(utteranceID: 1, text: "Un.", lang: "fra"))
+        t.apply(.turnEnd(utteranceID: 1, interrupted: false))
+        t.apply(.replyText(utteranceID: 5, text: "Deux.", lang: "fra"))
+        #expect(t.messages.map(\.text) == ["Un.", "Deux."])
+    }
+
+    @Test("l'écho d'un message texte crée la bulle utilisateur, comme la voix")
+    func textEcho() {
+        var t = ChatTranscript()
+        t.apply(transcript("salut", source: .text))
+        #expect(t.messages.count == 1 && t.messages[0].role == .user && t.messages[0].text == "salut")
+    }
+
+    @Test("transcription provisoire : aucune bulle")
+    func speculativeIgnored() {
+        var t = ChatTranscript()
+        t.apply(transcript("bon", speculative: true))
+        #expect(t.messages.isEmpty)
+    }
+
     @Test("sans reply_text : bulle « réponse vocale », puis texte si reply_text arrive")
     func voiceOnly() {
         var t = ChatTranscript()
-        t.apply(.ttsStart(utteranceID: 1, sampleRate: 16000, latencyMs: 0))
+        t.apply(.ttsStart(utteranceID: 4, sampleRate: 16000, latencyMs: 0))
         #expect(t.messages.last?.isVoiceOnly == true)
-        t.apply(.replyText(text: "Voici."))
+        t.apply(.replyText(utteranceID: 4, text: "Voici.", lang: "fra"))
         #expect(t.messages.count == 1 && t.messages[0].text == "Voici." && !t.messages[0].isVoiceOnly)
     }
 
-    @Test("interruption : la bulle est marquée interrompue")
+    @Test("reply_text puis tts_start du même tour : une seule bulle")
+    func replyThenTTS() {
+        var t = ChatTranscript()
+        t.apply(.replyText(utteranceID: 3, text: "Salut.", lang: "fra"))
+        t.apply(.ttsStart(utteranceID: 3, sampleRate: 16000, latencyMs: 0))
+        #expect(t.messages.count == 1)
+    }
+
+    @Test("turn_end interrompu : la bulle est marquée interrompue")
     func interrupted() {
         var t = ChatTranscript()
-        t.apply(.replyText(text: "Je commence"))
-        t.apply(.ttsEnd(utteranceID: 1, interrupted: true))
+        t.apply(.replyText(utteranceID: 1, text: "Je commence", lang: "fra"))
+        t.apply(.turnEnd(utteranceID: 1, interrupted: true))
         #expect(t.messages[0].status == .interrupted)
         #expect(t.currentAssistantID == nil)
     }
 
-    @Test("turn_error : message système honnête")
+    @Test("turn_error : message système honnête, rate_limited compris")
     func turnError() {
         var t = ChatTranscript()
-        t.apply(.turnError(code: "language_unavailable", message: nil))
+        t.apply(.turnError(code: "language_unavailable", message: "", lang: "sus"))
+        #expect(t.messages.last?.role == .system && t.messages.last?.text.contains("moteur vocal") == true)
+        t.apply(.turnError(code: "rate_limited", message: "", lang: nil))
+        #expect(t.messages.last?.text.contains("trop de messages") == true)
+        t.apply(.turnError(code: "code_inconnu", message: "", lang: nil))
         #expect(t.messages.last?.role == .system)
-        #expect(t.messages.last?.text.contains("moteur vocal") == true)
     }
 
-    @Test("carte d'action : confirmation exigée par défaut et pour confirm=true")
+    @Test("action confirm=true : carte en attente, rien à exécuter")
     func cardNeedsConfirmation() {
         var t = ChatTranscript()
-        #expect(t.apply(.toolCall(name: "order_ride", args: ["utterance": .string("x")])) == nil)
-        #expect(t.apply(.toolCall(name: "pay", args: ["confirm": .bool(true)])) == nil)
-        #expect(t.messages.allSatisfy { $0.card?.status == .awaitingConfirmation })
+        #expect(t.apply(.action(name: "cancel_ride", args: ["ride": .string("r1")], confirm: true)) == nil)
+        #expect(t.messages[0].card?.status == .awaitingConfirmation && t.messages[0].card?.requiresConfirmation == true)
     }
 
-    @Test("confirm=false : exécution immédiate")
+    @Test("action confirm=false : exécution immédiate")
     func cardAuto() {
         var t = ChatTranscript()
-        let auto = t.apply(.toolCall(name: "show_map", args: ["confirm": .bool(false)]))
+        let auto = t.apply(.action(name: "show_map", args: [:], confirm: false))
         #expect(auto?.card?.name == "show_map" && auto?.card?.status == .confirmed)
     }
 
     @Test("confirmer renvoie la carte une seule fois ; refuser ne renvoie rien")
     func resolve() {
         var t = ChatTranscript()
-        t.apply(.toolCall(name: "a", args: [:]))
-        t.apply(.toolCall(name: "b", args: [:]))
+        t.apply(.action(name: "a", args: [:], confirm: true))
+        t.apply(.action(name: "b", args: [:], confirm: true))
         #expect(t.resolveCard(messageID: 1, confirmed: true)?.name == "a")
         #expect(t.resolveCard(messageID: 1, confirmed: true) == nil)
         #expect(t.resolveCard(messageID: 2, confirmed: false) == nil)
         #expect(t.message(2)?.card?.status == .declined)
     }
 
-    @Test("résumé de carte sans le champ technique confirm")
+    @Test("résumé de carte : arguments textuels, triés")
     func summary() {
-        let c = ActionCard(name: "n", args: ["confirm": .bool(true), "to": .string("Kaloum")], status: .awaitingConfirmation)
-        #expect(c.summary == "to : Kaloum")
+        let c = ActionCard(name: "n", args: ["to": .string("Kaloum"), "n": .number(2), "a": .string("x")],
+                           requiresConfirmation: true, status: .awaitingConfirmation)
+        #expect(c.summary == "a : x\nto : Kaloum")
     }
 }
 
@@ -115,6 +153,24 @@ struct PresentationTests {
         #expect(LanguageCatalog.builtIn.count == AVELanguage.allCases.count)
     }
 
+    @Test("langues du serveur : disponibilité réelle, codes inconnus ignorés, détection ajoutée")
+    func serverLanguages() {
+        let server: [LanguageInfo] = [
+            LanguageInfo(code: "fra", name: "Français", native: "Français", status: "production", available: true),
+            LanguageInfo(code: "sus", name: "Soussou", native: "Sosoxui", status: "planned", available: false),
+            LanguageInfo(code: "wol", name: "Wolof", native: "Wolof", status: "experimental", available: true),
+            LanguageInfo(code: "zzz", name: "Inconnue", native: "?", status: "planned", available: true),
+            LanguageInfo(code: "zul", name: "Zoulou", native: "isiZulu", status: "planned", available: nil),
+        ]
+        let options = LanguageCatalog.options(from: server)
+        #expect(options.map(\.language) == [.french, .soussou, .wolof, .zulu, .auto])
+        #expect(options[0].isAvailable && !options[1].isAvailable && options[2].isAvailable)
+        #expect(options[2].detail.contains("expérimental"))
+        #expect(!options[3].isAvailable && options[3].detail.contains("inconnue"))
+        #expect(LanguageCatalog.options(from: nil) == LanguageCatalog.builtIn)
+        #expect(LanguageCatalog.options(from: []) == LanguageCatalog.builtIn)
+    }
+
     @Test("aucun texte ne promet une latence")
     func noLatencyPromise() {
         let texts = [UserMessages.noResponse, UserMessages.sessionRestarted, UserMessages.responseTruncated,
@@ -138,5 +194,23 @@ struct PresentationTests {
         #expect(m.phase == .idle)
         #expect(m.handle(.manualInterrupt).isEmpty)           // sans effet au repos
         #expect(m.handle(.ttsEnded(interrupted: true)).isEmpty) // reliquat ignoré
+    }
+
+    @Test("texte envoyé : réflexion ; pendant la parole, purge locale sans interrupt (le serveur coupe seul)")
+    func textSent() {
+        var m = BargeInStateMachine()
+        #expect(m.handle(.userSentText).isEmpty && m.phase == .thinking)
+        _ = m.handle(.ttsStarted)
+        #expect(m.handle(.userSentText) == [.purgePlayback] && m.phase == .thinking)
+    }
+
+    @Test("fin de tour sans audio : retour au repos ; le turn_end interrompu d'un tour coupé est ignoré")
+    func turnEnded() {
+        var m = BargeInStateMachine()
+        _ = m.handle(.userSentText)
+        _ = m.handle(.turnEnded(interrupted: true))
+        #expect(m.phase == .thinking)  // reliquat
+        _ = m.handle(.turnEnded(interrupted: false))
+        #expect(m.phase == .idle)
     }
 }

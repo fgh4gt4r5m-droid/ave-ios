@@ -21,7 +21,10 @@ public struct ChatView: View {
             controls
         }
         .sheet(isPresented: $showLanguages) {
-            LanguagePicker(selection: $language)
+            LanguagePicker(selection: $language, options: coordinator.languageOptions)
+        }
+        .onChange(of: language) { _, new in
+            Task { await coordinator.setLanguage(new.language) }
         }
         .task { await coordinator.start() }
         .onDisappear { Task { await coordinator.stop() } }
@@ -104,8 +107,9 @@ public struct ChatView: View {
             HStack {
                 TextField("Votre message", text: $draft).textFieldStyle(.roundedBorder).frame(minHeight: 44)
                 Button("Envoyer") {
-                    coordinator.sendText(draft)
+                    let message = draft
                     draft = ""
+                    Task { await coordinator.sendText(message) }
                 }
                 .frame(minHeight: 44)
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

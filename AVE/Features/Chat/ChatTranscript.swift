@@ -1,6 +1,6 @@
 import AVECore
 
-/// Intention d'action reçue du serveur (`tool_call`), à exécuter par l'application hôte.
+/// Intention d'action reçue du serveur (`action`), à exécuter par l'application hôte.
 public struct ActionCard: Sendable, Equatable {
     public enum Status: Sendable, Equatable {
         case awaitingConfirmation
@@ -10,19 +10,13 @@ public struct ActionCard: Sendable, Equatable {
 
     public let name: String
     public let args: [String: JSONValue]
+    /// `true` : accord explicite de l'utilisateur requis avant d'exécuter (argent, annulation). La voix seule ne suffit pas.
+    public let requiresConfirmation: Bool
     public var status: Status
 
-    /// DÉCISION DE SÉCURITÉ : la confirmation est exigée sauf si le serveur dit explicitement
-    /// `confirm: false`. Le serveur du sprint 1 n'envoie pas ce champ (contrat E5/Q1) ; exécuter
-    /// sans accord une action comme `order_ride` serait dangereux.
-    public static func requiresConfirmation(args: [String: JSONValue]) -> Bool {
-        args["confirm"]?.boolValue != false
-    }
-
-    /// Résumé lisible des arguments (sans le champ technique `confirm`).
+    /// Résumé lisible des arguments (chaînes uniquement).
     public var summary: String {
-        args.filter { $0.key != "confirm" }
-            .sorted { $0.key < $1.key }
+        args.sorted { $0.key < $1.key }
             .compactMap { key, value in value.stringValue.map { "\(key) : \($0)" } }
             .joined(separator: "\n")
     }
@@ -36,12 +30,15 @@ public struct ChatMessage: Identifiable, Sendable, Equatable {
     public let role: Role
     public var text: String
     public var status: Status
+    /// Tour du serveur auquel appartient ce message assistant (`utterance_id`).
+    public let utteranceID: Int?
     /// Réponse parlée dont le texte est inconnu (pas de `reply_text`) : l'UI affiche « Réponse vocale ».
     public var isVoiceOnly: Bool
     public var card: ActionCard?
 }
 
 /// Construit la conversation à partir des événements serveur. Pure, testable.
+/// La bulle utilisateur vient de l'écho `transcript` (voix ET texte) : l'app n'en fabrique pas d'autre.
 public struct ChatTranscript: Sendable, Equatable {
     public private(set) var messages: [ChatMessage] = []
     /// Message assistant en cours de construction (phrase par phrase via `reply_text`).
@@ -49,11 +46,6 @@ public struct ChatTranscript: Sendable, Equatable {
     private var nextID = 1
 
     public init() {}
-
-    public mutating func appendUserText(_ text: String) {
-        append(role: .user, text: text, status: .complete)
-        currentAssistantID = nil
-    }
 
     public mutating func appendSystem(_ text: String) {
         append(role: .system, text: text, status: .complete)
@@ -63,12 +55,14 @@ public struct ChatTranscript: Sendable, Equatable {
     @discardableResult
     public mutating func apply(_ event: ServerEvent) -> ChatMessage? {
         switch event {
-        case .transcript(let text, _, _):
+        case .transcript(let text, _, _, let speculative, _):
+            // Un résultat provisoire de l'ASR sera remplacé par le final : pas de bulle.
+            guard !speculative else { break }
             append(role: .user, text: text, status: .complete)
             currentAssistantID = nil
 
-        case .replyText(let text):
-            if let id = currentAssistantID, let i = index(of: id) {
+        case .replyText(let utteranceID, let text, _):
+            if let i = currentIndex(utterance: utteranceID) {
                 if messages[i].isVoiceOnly {
                     messages[i].text = text
                     messages[i].isVoiceOnly = false
@@ -76,29 +70,30 @@ public struct ChatTranscript: Sendable, Equatable {
                     messages[i].text += " " + text
                 }
             } else {
-                currentAssistantID = append(role: .assistant, text: text, status: .streaming)
+                currentAssistantID = append(role: .assistant, text: text, status: .streaming, utteranceID: utteranceID)
             }
 
-        case .ttsStart:
-            if currentAssistantID == nil {
-                currentAssistantID = append(role: .assistant, text: "", status: .streaming, voiceOnly: true)
+        case .ttsStart(let utteranceID, _, _):
+            if currentIndex(utterance: utteranceID) == nil {
+                currentAssistantID = append(role: .assistant, text: "", status: .streaming,
+                                            utteranceID: utteranceID, voiceOnly: true)
             }
 
-        case .ttsEnd(_, let interrupted):
+        case .turnEnd(_, let interrupted):
             finishAssistant(interrupted ? .interrupted : .complete)
 
         case .interrupted:
             finishAssistant(.interrupted)
 
-        case .turnError(let code, _):
+        case .turnError(let code, _, _):
             finishAssistant(.interrupted)
             appendSystem(UserMessages.turnError(code: code))
 
-        case .toolCall(let name, let args):
-            let needsConfirmation = ActionCard.requiresConfirmation(args: args)
-            let card = ActionCard(name: name, args: args, status: needsConfirmation ? .awaitingConfirmation : .confirmed)
+        case .action(let name, let args, let confirm):
+            let card = ActionCard(name: name, args: args, requiresConfirmation: confirm,
+                                  status: confirm ? .awaitingConfirmation : .confirmed)
             let id = append(role: .assistant, text: "", status: .complete, card: card)
-            return needsConfirmation ? nil : message(id)
+            return confirm ? nil : message(id)
 
         default:
             break
@@ -124,6 +119,11 @@ public struct ChatTranscript: Sendable, Equatable {
 
     private func index(of id: Int) -> Int? { messages.firstIndex { $0.id == id } }
 
+    private func currentIndex(utterance: Int) -> Int? {
+        guard let id = currentAssistantID, let i = index(of: id), messages[i].utteranceID == utterance else { return nil }
+        return i
+    }
+
     private mutating func finishAssistant(_ status: ChatMessage.Status) {
         if let id = currentAssistantID, let i = index(of: id) { messages[i].status = status }
         currentAssistantID = nil
@@ -131,10 +131,11 @@ public struct ChatTranscript: Sendable, Equatable {
 
     @discardableResult
     private mutating func append(role: ChatMessage.Role, text: String, status: ChatMessage.Status,
-                                 voiceOnly: Bool = false, card: ActionCard? = nil) -> Int {
+                                 utteranceID: Int? = nil, voiceOnly: Bool = false, card: ActionCard? = nil) -> Int {
         let id = nextID
         nextID += 1
-        messages.append(ChatMessage(id: id, role: role, text: text, status: status, isVoiceOnly: voiceOnly, card: card))
+        messages.append(ChatMessage(id: id, role: role, text: text, status: status, utteranceID: utteranceID,
+                                    isVoiceOnly: voiceOnly, card: card))
         return id
     }
 }

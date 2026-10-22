@@ -4,8 +4,44 @@ import Testing
 
 @Suite("Trames binaires")
 struct AVEProtocolTests {
-    // Vecteurs DÉRIVÉS de ave/protocol.py (pack_audio) : CLAUDE.md est absent du dépôt, les
-    // vecteurs officiels n'ont donc pas pu être repris. À comparer à CLAUDE.md dès qu'il est fourni.
+    private func bytes(hex: String) -> Data {
+        var out = Data()
+        var index = hex.startIndex
+        while index < hex.endIndex, let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) {
+            if let byte = UInt8(hex[index..<next], radix: 16) { out.append(byte) }
+            index = next
+        }
+        return out
+    }
+
+    // Vecteurs OFFICIELS de docs/ios/CLAUDE.md (dépôt serveur), produits par le serveur, repris tels quels.
+    @Test("vecteur officiel 1 : micro seq=1, charge 01 00 02 00")
+    func official1() throws {
+        let expected = bytes(hex: "010000000101000200")
+        let frame = AudioFrame(kind: .mic, seq: 1, payload: bytes(hex: "01000200"))
+        #expect(frame.encoded() == expected)
+        #expect(try AudioFrame.decode(expected) == frame)
+    }
+
+    @Test("vecteur officiel 2 : micro seq=258, charge vide")
+    func official2() throws {
+        let expected = bytes(hex: "0100000102")
+        let frame = AudioFrame(kind: .mic, seq: 258, payload: Data())
+        #expect(frame.encoded() == expected)
+        #expect(try AudioFrame.decode(expected) == frame)
+    }
+
+    @Test("vecteur officiel 3 : TTS seq=64, charge ff 7f (échantillon 32767)")
+    func official3() throws {
+        let expected = bytes(hex: "0200000040ff7f")
+        let frame = AudioFrame(kind: .tts, seq: 64, payload: bytes(hex: "ff7f"))
+        #expect(frame.encoded() == expected)
+        let decoded = try AudioFrame.decode(expected)
+        #expect(decoded == frame)
+        #expect(PCM16.samples(from: decoded.payload) == [32767])
+    }
+
+    // Vecteurs complémentaires, dérivés de ave/protocol.py (pack_audio).
     @Test("vecteur 1 : micro seq=1, échantillon 1")
     func vector1() throws {
         let bytes: [UInt8] = [0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00]

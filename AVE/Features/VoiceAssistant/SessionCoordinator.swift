@@ -17,8 +17,8 @@ public final class SessionCoordinator {
         public var preRollFrames = 10
         /// Sans réponse après `end_of_speech` au bout de ce délai, le tour est abandonné.
         public var turnTimeout: Duration = .seconds(20)
-        /// Faux tant que le serveur n'accepte pas de texte (contrat E13).
-        public var supportsTextInput = false
+        /// Faux pour désactiver la saisie texte avec un serveur qui ne gère pas `text`.
+        public var supportsTextInput = true
         /// Plafond de mémoire pour l'audio mis en cache (« réécouter »).
         public var replayCacheBytes = 4_000_000
 
@@ -35,6 +35,8 @@ public final class SessionCoordinator {
     /// Dernier message d'état à montrer (erreur, perte de données…). `nil` = rien à signaler.
     public private(set) var notice: String?
     public private(set) var replayingMessageID: Int?
+    /// Langues avec leur disponibilité réelle (`ready.languages`), sinon la liste de repli.
+    public private(set) var languageOptions: [LanguageOption] = LanguageCatalog.builtIn
 
     public var orbState: OrbState { OrbState(phase: phase, connection: connection) }
     public var supportsTextInput: Bool { configuration.supportsTextInput }
@@ -128,13 +130,29 @@ public final class SessionCoordinator {
         syncPhase()
     }
 
-    /// Saisie texte : indisponible tant que le protocole n'a pas de message dédié (contrat E13).
-    public func sendText(_ text: String) {
+    /// Envoie un message texte. La bulle de l'utilisateur apparaît à l'écho `transcript {source:"text"}`
+    /// du serveur, comme pour la voix. Parler pendant ce temps vaut barge-in côté serveur.
+    public func sendText(_ text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         guard supportsTextInput else {
             notice = UserMessages.textInputUnavailable
             return
         }
-        transcript.appendUserText(text)
+        guard trimmed.count <= 4000 else {
+            notice = UserMessages.textTooLong
+            return
+        }
+        if await client.sendText(trimmed) {
+            if replayingMessageID != nil { stopReplay() }
+            await perform(machine.handle(.userSentText))
+        } else {
+            notice = UserMessages.notConnected
+        }
+    }
+
+    public func setLanguage(_ language: AVELanguage) async {
+        await client.setLanguage(language)
     }
 
     public func confirmAction(messageID: Int) {
@@ -238,6 +256,8 @@ public final class SessionCoordinator {
             case .idle, .connecting, .reconnecting:
                 break
             }
+        case .ready(let ready):
+            languageOptions = LanguageCatalog.options(from: ready.languages)
         case .audio(let data):
             handleAudio(data)
         case .replayGap(_, let gap):
@@ -262,6 +282,8 @@ public final class SessionCoordinator {
                 if let id { cache(chunks: utteranceChunks, for: id) }
             }
             utteranceChunks = []
+        case .turnEnd(_, let interrupted):
+            await perform(machine.handle(.turnEnded(interrupted: interrupted)))
             transcript.apply(event)
         case .interrupted:
             await perform(machine.handle(.serverInterrupted))
@@ -269,7 +291,7 @@ public final class SessionCoordinator {
         case .turnError:
             await perform(machine.handle(.turnFailed))
             transcript.apply(event)
-        case .toolCall, .replyText, .transcript:
+        case .action, .replyText, .transcript:
             if let auto = transcript.apply(event), let card = auto.card { onAction?(card) }
         default:
             break

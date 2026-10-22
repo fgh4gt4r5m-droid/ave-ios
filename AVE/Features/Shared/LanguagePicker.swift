@@ -8,19 +8,21 @@ public struct AVELanguageSelection: Equatable, Sendable {
     public init(language: AVELanguage = .french) { self.language = language }
 }
 
-/// Liste des langues avec statuts honnêtes (liste codée en dur, voir `LanguageCatalog`).
+/// Liste des langues avec statuts honnêtes : ceux du serveur (`ready.languages`) ou, à défaut, la liste de repli.
 public struct LanguagePicker: View {
     @Binding var selection: AVELanguageSelection
+    private let options: [LanguageOption]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.aveTheme) private var theme
 
-    public init(selection: Binding<AVELanguageSelection>) {
+    public init(selection: Binding<AVELanguageSelection>, options: [LanguageOption] = LanguageCatalog.builtIn) {
         self._selection = selection
+        self.options = options
     }
 
     public var body: some View {
         NavigationStack {
-            List(LanguageCatalog.builtIn) { option in
+            List(options) { option in
                 Button {
                     selection.language = option.language
                     dismiss()

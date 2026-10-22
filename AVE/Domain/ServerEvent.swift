@@ -7,16 +7,25 @@ public enum ServerEvent: Sendable, Equatable {
     case replayed(count: Int, gap: Bool)
     case pong(t: Double?)
     case error(code: String, message: String)
-    case transcript(text: String, lang: String, confidence: Double)
-    case toolCall(name: String, args: [String: JSONValue])
+    /// `source == .text` : écho d'un message `text` (confidence 1). `speculative` : résultat provisoire de l'ASR.
+    case transcript(text: String, lang: String, confidence: Double, speculative: Bool, source: TranscriptSource)
+    /// Action métier à exécuter par l'application. `confirm == true` : accord explicite de l'utilisateur requis.
+    case action(name: String, args: [String: JSONValue], confirm: Bool)
     case ttsStart(utteranceID: Int, sampleRate: Int, latencyMs: Int)
     case ttsEnd(utteranceID: Int, interrupted: Bool)
+    /// Clôt TOUJOURS un tour (les clients texte seul n'ont pas de `tts_end`).
+    case turnEnd(utteranceID: Int, interrupted: Bool)
     case interrupted
-    /// NON VÉRIFIÉ : absent de docs/PROTOCOL.md et du serveur du sprint 1. Forme supposée `{text}`.
-    case replyText(text: String)
-    /// NON VÉRIFIÉ : absent du serveur du sprint 1. Forme supposée `{code, message?}`.
-    case turnError(code: String, message: String?)
+    /// Une phrase de la réponse, émise avant son audio.
+    case replyText(utteranceID: Int, text: String, lang: String)
+    /// Échec d'un tour, session ouverte. `turn_end` suit, sauf pour `rate_limited`.
+    case turnError(code: String, message: String, lang: String?)
+    /// Détection de parole côté serveur (seulement avec `vad:"server"`) : ignorés par l'app (`vad:"client"`).
+    case speechStart, speechEnd
+    case languageSet(lang: String)
     case unknown(type: String)
+
+    public enum TranscriptSource: String, Sendable, Equatable { case voice, text }
 
     public struct Ready: Sendable, Equatable {
         public let sessionID: String
@@ -24,6 +33,10 @@ public enum ServerEvent: Sendable, Equatable {
         public let lastMicSeq: UInt32
         public let seq: UInt32
         public let protocolVersion: Int
+        /// Durée de grâce de la session après une coupure (30 s).
+        public let graceSeconds: Double?
+        /// Langues du registre avec leur disponibilité réelle. `nil` sur un serveur ancien.
+        public let languages: [LanguageInfo]?
     }
 }
 
@@ -56,13 +69,29 @@ public struct ServerFrame: Sendable, Equatable {
             struct B: Decodable {
                 let session_id: String; let resumed: Bool; let last_mic_seq: UInt32
                 let seq: UInt32; let protocolVersion: Int
+                let graceSeconds: Double?; let languages: [LanguageInfo]?
                 enum CodingKeys: String, CodingKey {
                     case session_id, resumed, last_mic_seq, seq, protocolVersion = "protocol"
+                    case graceSeconds = "grace_s", languages
+                }
+
+                // Les champs ajoutés au fil des versions (grace_s est un FLOTTANT : 30.0, languages) ne
+                // doivent JAMAIS empêcher la lecture de `ready` : sans lui, la session n'est jamais prête.
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    session_id = try c.decode(String.self, forKey: .session_id)
+                    resumed = try c.decode(Bool.self, forKey: .resumed)
+                    last_mic_seq = try c.decode(UInt32.self, forKey: .last_mic_seq)
+                    seq = try c.decode(UInt32.self, forKey: .seq)
+                    protocolVersion = try c.decode(Int.self, forKey: .protocolVersion)
+                    graceSeconds = try? c.decodeIfPresent(Double.self, forKey: .graceSeconds)
+                    languages = try? c.decodeIfPresent([LanguageInfo].self, forKey: .languages)
                 }
             }
             let b = try body(B.self)
             event = .ready(.init(sessionID: b.session_id, resumed: b.resumed, lastMicSeq: b.last_mic_seq,
-                                 seq: b.seq, protocolVersion: b.protocolVersion))
+                                 seq: b.seq, protocolVersion: b.protocolVersion,
+                                 graceSeconds: b.graceSeconds, languages: b.languages))
         case "replayed":
             struct B: Decodable { let count: Int; let gap: Bool }
             let b = try body(B.self)
@@ -75,13 +104,19 @@ public struct ServerFrame: Sendable, Equatable {
             let b = try body(B.self)
             event = .error(code: b.code, message: b.message ?? "")
         case "transcript":
-            struct B: Decodable { let text: String; let lang: String; let confidence: Double? }
+            struct B: Decodable {
+                let text: String; let lang: String; let confidence: Double?
+                let speculative: Bool?; let source: String?
+            }
             let b = try body(B.self)
-            event = .transcript(text: b.text, lang: b.lang, confidence: b.confidence ?? 1)
-        case "tool_call":
-            struct B: Decodable { let name: String; let args: [String: JSONValue]? }
+            event = .transcript(text: b.text, lang: b.lang, confidence: b.confidence ?? 1,
+                                speculative: b.speculative ?? false,
+                                source: b.source == "text" ? .text : .voice)
+        case "action":
+            struct B: Decodable { let name: String; let args: [String: JSONValue]?; let confirm: Bool? }
             let b = try body(B.self)
-            event = .toolCall(name: b.name, args: b.args ?? [:])
+            // Un `confirm` absent est traité comme `true` : mieux vaut demander que d'exécuter à tort.
+            event = .action(name: b.name, args: b.args ?? [:], confirm: b.confirm ?? true)
         case "tts_start":
             struct B: Decodable { let utterance_id: Int; let sample_rate: Int; let latency_ms: Int }
             let b = try body(B.self)
@@ -90,15 +125,27 @@ public struct ServerFrame: Sendable, Equatable {
             struct B: Decodable { let utterance_id: Int; let interrupted: Bool }
             let b = try body(B.self)
             event = .ttsEnd(utteranceID: b.utterance_id, interrupted: b.interrupted)
+        case "turn_end":
+            struct B: Decodable { let utterance_id: Int; let interrupted: Bool }
+            let b = try body(B.self)
+            event = .turnEnd(utteranceID: b.utterance_id, interrupted: b.interrupted)
         case "interrupted":
             event = .interrupted
         case "reply_text":
-            struct B: Decodable { let text: String }
-            event = .replyText(text: try body(B.self).text)
-        case "turn_error":
-            struct B: Decodable { let code: String; let message: String? }
+            struct B: Decodable { let utterance_id: Int; let text: String; let lang: String? }
             let b = try body(B.self)
-            event = .turnError(code: b.code, message: b.message)
+            event = .replyText(utteranceID: b.utterance_id, text: b.text, lang: b.lang ?? "")
+        case "turn_error":
+            struct B: Decodable { let code: String; let message: String?; let lang: String? }
+            let b = try body(B.self)
+            event = .turnError(code: b.code, message: b.message ?? "", lang: b.lang)
+        case "speech_start":
+            event = .speechStart
+        case "speech_end":
+            event = .speechEnd
+        case "language_set":
+            struct B: Decodable { let lang: String }
+            event = .languageSet(lang: try body(B.self).lang)
         default:
             event = .unknown(type: env.type)
         }

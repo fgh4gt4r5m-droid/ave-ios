@@ -7,10 +7,13 @@ public struct AVEConfiguration: Sendable {
     public var defaultLanguage: AVELanguage
     public var tokenProvider: AVETokenProvider
     public var logger: AVELogger
+    /// Identification de l'app hôte (WoYo, TaGa…) pour la console ; aucune donnée personnelle.
+    public var clientInfo: ClientInfo?
 
     public init(endpoint: AVEEndpoint, defaultLanguage: AVELanguage = .auto,
                 tokenProvider: @escaping AVETokenProvider = { nil },
-                logger: AVELogger = .silent) {
+                logger: AVELogger = .silent, clientInfo: ClientInfo? = nil) {
+        self.clientInfo = clientInfo
         self.endpoint = endpoint
         self.defaultLanguage = defaultLanguage
         self.tokenProvider = tokenProvider
@@ -22,7 +25,8 @@ public struct AVEConfiguration: Sendable {
         language: AVELanguage? = nil,
         transportFactory: @escaping TransportFactory = URLSessionWebSocketTransport.factory
     ) -> AVEWebSocketClient {
-        let client = AVEWebSocketClient.Configuration(endpoint: endpoint, lang: language ?? defaultLanguage)
+        let client = AVEWebSocketClient.Configuration(endpoint: endpoint, lang: language ?? defaultLanguage,
+                                                  clientInfo: clientInfo)
         return AVEWebSocketClient(configuration: client, tokenProvider: tokenProvider,
                                   transportFactory: transportFactory, logger: logger)
     }

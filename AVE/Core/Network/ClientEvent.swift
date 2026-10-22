@@ -10,6 +10,10 @@ public enum AVEFatalError: String, Sendable, Equatable {
     // corrigent pas en réessayant (le serveur ferme en 1008 après chacune).
     case badLang = "bad_lang"
     case badSampleRate = "bad_sample_rate"
+    case languageNotAllowed = "language_not_allowed"
+    case badOutput = "bad_output"
+    case badVad = "bad_vad"
+    case codecMismatch = "codec_mismatch"
 
     public init?(code: String) { self.init(rawValue: code) }
 }
@@ -27,6 +31,8 @@ public enum ConnectionState: Sendable, Equatable {
 /// Flux typé vers l'UI, dans l'ordre de réception.
 public enum ClientEvent: Sendable, Equatable {
     case state(ConnectionState)
+    /// `ready` reçu : langues annoncées par le serveur et durée de grâce.
+    case ready(ServerEvent.Ready)
     /// Chunk PCM16 mono du TTS (déjà dédoublonné), sans l'en-tête binaire.
     case audio(Data)
     case server(ServerEvent)

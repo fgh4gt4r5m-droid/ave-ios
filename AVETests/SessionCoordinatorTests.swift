@@ -158,7 +158,7 @@ struct SessionCoordinatorTests {
         let h = try Harness()
         let t = try await h.open()
         await h.speakOneUtterance()
-        t.serverSend(#"{"type":"turn_error","seq":1,"code":"language_unavailable"}"#)
+        t.serverSend(#"{"type":"turn_error","seq":1,"code":"language_unavailable","message":"m","lang":"sus"}"#)
         #expect(await eventually { await h.coordinator.phase == .idle })
         #expect(h.coordinator.transcript.messages.last?.text.contains("moteur vocal") == true)
         await h.coordinator.stop()
@@ -199,28 +199,73 @@ struct SessionCoordinatorTests {
         await h.coordinator.stop()
     }
 
-    @Test("saisie texte : refusée honnêtement tant que le serveur ne la supporte pas")
-    func textUnsupported() async throws {
+    @Test("texte : envoyé tel quel, bulle utilisateur à l'écho serveur, réponse par reply_text, tour clos par turn_end")
+    func textTurn() async throws {
         let h = try Harness()
+        let t = try await h.open()
         await h.coordinator.setMode(.text)
-        h.coordinator.sendText("salut")
-        #expect(h.coordinator.notice == UserMessages.textInputUnavailable)
-        #expect(h.coordinator.transcript.messages.isEmpty)
+        await h.coordinator.sendText("  Où est ma course ?  ")
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "text" } })
+        #expect(t.sentJSON.last?["text"] as? String == "Où est ma course ?")
+        #expect(h.coordinator.phase == .thinking)
+        #expect(h.coordinator.transcript.messages.isEmpty)  // pas de bulle locale : on attend l'écho
+
+        t.serverSend(#"{"type":"transcript","seq":1,"text":"Où est ma course ?","lang":"fra","confidence":1,"speculative":false,"source":"text"}"#)
+        t.serverSend(#"{"type":"reply_text","seq":2,"utterance_id":2,"text":"Elle arrive.","lang":"fra"}"#)
+        t.serverSend(#"{"type":"turn_end","seq":3,"utterance_id":2,"interrupted":false}"#)
+        #expect(await eventually { await h.coordinator.phase == .idle })
+        let messages = h.coordinator.transcript.messages
+        #expect(messages.map(\.text) == ["Où est ma course ?", "Elle arrive."])
+        #expect(messages[1].status == .complete)
+        await h.coordinator.stop()
     }
 
-    @Test("actions : rien ne part sans confirmation, sauf confirm=false")
+    @Test("texte envoyé pendant que l'assistant parle : purge locale, pas d'interrupt (le serveur coupe seul)")
+    func textBargeIn() async throws {
+        let h = try Harness()
+        let t = try await h.open()
+        t.serverSend(#"{"type":"tts_start","seq":1,"utterance_id":1,"latency_ms":0,"sample_rate":16000}"#)
+        #expect(await eventually { await h.coordinator.phase == .speaking })
+        await h.coordinator.sendText("stop")
+        #expect(h.player.purges >= 1)
+        #expect(await h.coordinator.phase == .thinking)
+        #expect(!t.sentJSON.contains { $0["type"] as? String == "interrupt" })
+        await h.coordinator.stop()
+    }
+
+    @Test("texte hors ligne : message non perdu en silence, l'utilisateur est prévenu")
+    func textOffline() async throws {
+        let h = try Harness()  // jamais démarré : pas de session prête
+        await h.coordinator.sendText("salut")
+        #expect(h.coordinator.notice == UserMessages.notConnected)
+        let tooLong = String(repeating: "a", count: 4001)
+        await h.coordinator.sendText(tooLong)
+        #expect(h.coordinator.notice == UserMessages.textTooLong)
+    }
+
+    @Test("langues du serveur : la liste affichée suit ready.languages")
+    func serverLanguagesShown() async throws {
+        let h = try Harness()
+        await h.coordinator.start()
+        let t = try #require(await h.factory.waitForTransport(0))
+        t.serverReady(languages: #"[{"code":"fra","name":"Français","native":"Français","regions":[],"status":"production","available":true},{"code":"sus","name":"Soussou","native":"Sosoxui","regions":[],"status":"planned","available":false}]"#)
+        #expect(await eventually { await h.coordinator.languageOptions.count == 3 })  // fra, sus + détection
+        await h.coordinator.stop()
+    }
+
+    @Test("actions : rien ne part sans confirmation quand confirm=true")
     func actionConfirmation() async throws {
         let h = try Harness()
         let t = try await h.open()
-        t.serverSend(#"{"type":"tool_call","seq":1,"name":"order_ride","args":{"utterance":"x"}}"#)
-        t.serverSend(#"{"type":"tool_call","seq":2,"name":"pay","args":{"confirm":true}}"#)
-        t.serverSend(#"{"type":"tool_call","seq":3,"name":"show_map","args":{"confirm":false}}"#)
+        t.serverSend(#"{"type":"action","seq":1,"name":"cancel_ride","args":{"ride":"r1"},"confirm":true}"#)
+        t.serverSend(#"{"type":"action","seq":2,"name":"transfer","args":{},"confirm":true}"#)
+        t.serverSend(#"{"type":"action","seq":3,"name":"show_map","args":{},"confirm":false}"#)
         #expect(await eventually { await h.coordinator.transcript.messages.count == 3 })
         #expect(h.actions.names == ["show_map"])
         let msgs = h.coordinator.transcript.messages
         h.coordinator.confirmAction(messageID: msgs[0].id)
         h.coordinator.declineAction(messageID: msgs[1].id)
-        #expect(h.actions.names == ["show_map", "order_ride"])
+        #expect(h.actions.names == ["show_map", "cancel_ride"])
         await h.coordinator.stop()
     }
 

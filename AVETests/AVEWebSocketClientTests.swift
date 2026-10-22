@@ -34,6 +34,7 @@ struct AVEWebSocketClientTests {
         #expect(hello["type"] as? String == "hello")
         #expect(hello["token"] as? String == "secret-token")
         #expect(hello["session_id"] == nil)
+        #expect(hello["vad"] as? String == "client")  // le défaut serveur est `server` : l'app gate le micro elle-même
         #expect(!f.urls[0].absoluteString.contains("secret-token"))
         await client.stop()
     }
@@ -226,6 +227,10 @@ struct AVEWebSocketClientTests {
         ("too_many_sessions", .tooManySessions),
         ("bad_version", .badVersion),
         ("unsupported_codec", .unsupportedCodec),
+        ("language_not_allowed", .languageNotAllowed),
+        ("bad_output", .badOutput),
+        ("bad_vad", .badVad),
+        ("codec_mismatch", .codecMismatch),
     ])
     func fatalErrors(code: String, expected: AVEFatalError) async throws {
         let f = FakeTransportFactory()
@@ -301,6 +306,40 @@ struct AVEWebSocketClientTests {
         await settle(100)
         #expect(f.count == 1)
         #expect(await eventually { await rec.states.last == .closed })
+    }
+
+    @Test("sendText : refusé hors ligne ou hors bornes, envoyé en ligne ; langue mémorisée pour la reprise")
+    func sendTextAndLanguage() async throws {
+        let f = FakeTransportFactory()
+        let client = try makeClient(factory: f)
+        await client.start()
+        #expect(await client.sendText("avant ready") == false)
+        let t0 = try #require(await f.waitForTransport(0))
+        t0.serverReady()
+        #expect(await eventually { await client.isReadyForTests })
+        #expect(await client.sendText("") == false)
+        #expect(await client.sendText(String(repeating: "a", count: 4001)) == false)
+        #expect(await client.sendText("bonjour") == true)
+        #expect(await eventually { t0.sentJSON.contains { $0["type"] as? String == "text" } })
+        await client.setLanguage(.soussou)
+        #expect(await eventually { t0.sentJSON.contains { $0["type"] as? String == "set_language" } })
+        t0.serverDrop()
+        let t1 = try #require(await f.waitForTransport(1))
+        #expect(await eventually { !t1.sentJSON.isEmpty })
+        #expect(t1.sentJSON[0]["lang"] as? String == "sus")
+        await client.stop()
+    }
+
+    @Test("ready : langues et grâce transmises à l'UI")
+    func readyForwarded() async throws {
+        let f = FakeTransportFactory()
+        let client = try makeClient(factory: f)
+        let rec = EventRecorder.record(client.events)
+        await client.start()
+        let t = try #require(await f.waitForTransport(0))
+        t.serverReady(languages: #"[{"code":"fra","name":"Français","native":"Français","regions":[],"status":"production","available":true}]"#)
+        #expect(await eventually { await rec.events.contains { if case .ready(let r) = $0 { r.languages?.count == 1 && r.graceSeconds == 30 } else { false } } })
+        await client.stop()
     }
 
     @Test("interrupt : envoyé en ligne, abandonné hors ligne")

@@ -7,6 +7,16 @@ public enum UserMessages {
         switch code {
         case "language_unavailable":
             return "Cette langue n'a pas encore de moteur vocal. Choisissez le français pour parler avec l'assistant."
+        case "unsupported_language":
+            return "Cette langue n'est pas prise en charge."
+        case "language_not_allowed":
+            return "Cette langue n'est pas autorisée pour votre accès."
+        case "routing_failed":
+            return "Je n'ai pas pu déterminer la langue. Choisissez-la dans la liste."
+        case "asr_failed":
+            return "Je n'ai pas pu comprendre l'audio. Vous pouvez réessayer."
+        case "rate_limited":
+            return "Vous envoyez trop de messages. Patientez un instant."
         default:
             return "Un problème est survenu pendant cette réponse. Vous pouvez réessayer."
         }
@@ -19,6 +29,8 @@ public enum UserMessages {
         case .badVersion: return "Cette version de l'application n'est plus compatible avec le serveur. Mettez-la à jour."
         case .unsupportedCodec, .badSampleRate: return "Le serveur n'accepte pas le format audio de cet appareil."
         case .badLang: return "Le serveur ne reconnaît pas cette langue."
+        case .languageNotAllowed: return "Cette langue n'est pas autorisée pour votre accès."
+        case .badOutput, .badVad, .codecMismatch: return "Réglage incompatible avec le serveur. Mettez l'application à jour."
         }
     }
 
@@ -37,5 +49,7 @@ public enum UserMessages {
     public static let noResponse = "L'assistant n'a pas répondu. Vous pouvez réessayer."
     public static let microphoneDenied = "Accès au micro refusé : le mode vocal est désactivé. Vous pouvez l'autoriser dans les Réglages."
     public static let audioUnavailable = "Impossible d'activer l'audio sur cet appareil."
-    public static let textInputUnavailable = "La saisie de texte n'est pas encore disponible : le serveur ne sait recevoir que la voix."
+    public static let textInputUnavailable = "La saisie de texte n'est pas disponible avec ce serveur."
+    public static let notConnected = "Pas de connexion : message non envoyé. Réessayez dans un instant."
+    public static let textTooLong = "Message trop long (4 000 caractères au maximum)."
 }
