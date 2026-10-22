@@ -1,24 +1,9 @@
 #if os(iOS)
 import AVFoundation
 
-public enum AudioRoute: Sendable, Equatable {
-    case builtInSpeaker, receiver, headphones, bluetooth, other
-}
-
-public enum AudioRouteChangeReason: Sendable, Equatable {
-    case newDeviceAvailable, oldDeviceUnavailable, categoryChange, override, other
-}
-
-public enum AudioSessionEvent: Sendable, Equatable {
-    case interruptionBegan
-    case interruptionEnded(shouldResume: Bool)
-    case routeChanged(AudioRoute, reason: AudioRouteChangeReason)
-    case mediaServicesReset
-}
-
 /// Configure `AVAudioSession` pour la conversation vocale et traduit les notifications système
 /// en un flux d'événements simples pour le coordinateur de session.
-public final class AudioSessionManager: @unchecked Sendable {
+public final class AudioSessionManager: AudioLifecycle, @unchecked Sendable {
     public let events: AsyncStream<AudioSessionEvent>
     private let continuation: AsyncStream<AudioSessionEvent>.Continuation
     private let lock = NSLock()

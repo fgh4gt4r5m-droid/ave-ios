@@ -22,6 +22,8 @@ public struct BargeInStateMachine: Sendable, Equatable {
         case turnFailed
         /// Connexion perdue ou session arrêtée.
         case sessionLost
+        /// Coupure volontaire (bouton, passage en mode texte, appel entrant) : l'utilisateur ne parle pas.
+        case manualInterrupt
     }
 
     public enum Action: Sendable, Equatable {
@@ -65,6 +67,9 @@ public struct BargeInStateMachine: Sendable, Equatable {
         case (.speaking, .serverInterrupted):
             phase = .idle
             return [.purgePlayback]
+        case (.speaking, .manualInterrupt):
+            phase = .idle
+            return [.purgePlayback, .sendInterrupt]
         case (.speaking, .turnFailed):
             phase = .idle
             return [.purgePlayback]

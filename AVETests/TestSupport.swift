@@ -125,18 +125,11 @@ actor EventRecorder {
     var states: [ConnectionState] {
         events.compactMap { if case .state(let s) = $0 { return s } else { return nil } }
     }
+    var audioChunks: [Data] {
+        events.compactMap { if case .audio(let d) = $0 { return d } else { return nil } }
+    }
     var serverEvents: [ServerEvent] {
         events.compactMap { if case .server(let s) = $0 { return s } else { return nil } }
-    }
-}
-
-actor DataRecorder {
-    private(set) var chunks: [Data] = []
-    func append(_ d: Data) { chunks.append(d) }
-    static func record(_ stream: AsyncStream<Data>) -> DataRecorder {
-        let r = DataRecorder()
-        Task { for await d in stream { await r.append(d) } }
-        return r
     }
 }
 

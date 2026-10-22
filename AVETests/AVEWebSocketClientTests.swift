@@ -162,7 +162,6 @@ struct AVEWebSocketClientTests {
         let f = FakeTransportFactory()
         let client = try makeClient(factory: f)
         let rec = EventRecorder.record(client.events)
-        let audio = DataRecorder.record(client.audio)
         await client.start()
         let t0 = try #require(await f.waitForTransport(0))
         t0.serverReady()
@@ -170,7 +169,7 @@ struct AVEWebSocketClientTests {
         t0.serverSend(audio: 2, Data([2, 0]))
         t0.serverSend(audio: 2, Data([9, 9]))  // doublon
         t0.serverSend(audio: 3, Data([3, 0]))
-        #expect(await eventually { await audio.chunks.count == 2 })
+        #expect(await eventually { await rec.audioChunks.count == 2 })
         t0.serverDrop()
         let t1 = try #require(await f.waitForTransport(1))
         t1.serverReady(resumed: true)
@@ -179,8 +178,8 @@ struct AVEWebSocketClientTests {
         t1.serverSend(audio: 4, Data([4, 0]))  // nouveau
         t1.serverSend(#"{"type":"tts_end","seq":5,"utterance_id":1,"interrupted":false}"#)
         #expect(await eventually { await rec.serverEvents.count == 2 })
-        #expect(await eventually { await audio.chunks.count == 3 })
-        #expect(await audio.chunks == [Data([2, 0]), Data([3, 0]), Data([4, 0])])
+        #expect(await eventually { await rec.audioChunks.count == 3 })
+        #expect(await rec.audioChunks == [Data([2, 0]), Data([3, 0]), Data([4, 0])])
         #expect(await rec.serverEvents == [
             .ttsStart(utteranceID: 1, sampleRate: 16000, latencyMs: 1),
             .ttsEnd(utteranceID: 1, interrupted: false),

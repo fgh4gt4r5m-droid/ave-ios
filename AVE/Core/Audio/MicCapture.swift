@@ -2,18 +2,12 @@
 import AVECore
 import AVFoundation
 
-/// Trame micro de 20 ms, prête pour le protocole (PCM16 mono 16 kHz).
-public struct MicFrame: Sendable {
-    public let pcm: Data
-    public let rms: Float
-}
-
 /// Capture micro via le tap de l'`AVAudioEngine`.
 ///
 /// Le callback du tap ne fait que COPIER les échantillons et les poser dans un flux : pas de
 /// conversion, pas de verrou, pas de log. Rééchantillonnage (AVAudioConverter), découpage en
 /// trames de 20 ms et calcul de niveau se font dans une tâche séparée.
-public final class MicCapture: @unchecked Sendable {
+public final class MicCapture: MicSource, @unchecked Sendable {
     private struct RawChunk: Sendable {
         let samples: [Float]
         let sampleRate: Double

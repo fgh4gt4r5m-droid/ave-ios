@@ -24,9 +24,11 @@ public enum ConnectionState: Sendable, Equatable {
     case closed
 }
 
-/// Flux typé vers l'UI. L'audio TTS passe par `AVEWebSocketClient.audio`.
+/// Flux typé vers l'UI, dans l'ordre de réception.
 public enum ClientEvent: Sendable, Equatable {
     case state(ConnectionState)
+    /// Chunk PCM16 mono du TTS (déjà dédoublonné), sans l'en-tête binaire.
+    case audio(Data)
     case server(ServerEvent)
     /// Après reprise : `gap == true` signifie que le serveur a oublié des trames (réponse tronquée).
     case replayGap(count: Int, gap: Bool)

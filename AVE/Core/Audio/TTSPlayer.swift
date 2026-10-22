@@ -3,7 +3,7 @@ import AVECore
 import AVFoundation
 
 /// Lecture du TTS : `AVAudioPlayerNode` sur le moteur partagé, file d'amorçage (~100 ms) et purge instantanée.
-public final class TTSPlayer: @unchecked Sendable {
+public final class TTSPlayer: SpeechPlayer, @unchecked Sendable {
     /// Niveau de lecture 0…1 par chunk programmé (approximation : devance la lecture réelle d'environ la durée d'amorçage).
     public let levels: AsyncStream<Float>
     private let levelsOut: AsyncStream<Float>.Continuation

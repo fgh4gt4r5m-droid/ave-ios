@@ -26,17 +26,15 @@ public actor AVEWebSocketClient {
         }
     }
 
-    /// Événements d'état, de protocole et d'erreur pour l'UI.
+    /// État, événements de protocole, erreurs ET audio TTS, dans l'ordre exact de réception : un seul
+    /// flux garantit qu'un chunk n'est jamais traité avant le `tts_start` qui le précède.
     public nonisolated let events: AsyncStream<ClientEvent>
-    /// Chunks PCM16 mono du TTS (déjà dédoublonnés et ordonnés), sans l'en-tête.
-    public nonisolated let audio: AsyncStream<Data>
 
     private let config: Configuration
     private let tokenProvider: AVETokenProvider
     private let transportFactory: TransportFactory
     private let log: AVELogger
     private let eventsOut: AsyncStream<ClientEvent>.Continuation
-    private let audioOut: AsyncStream<Data>.Continuation
 
     private var runTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
@@ -63,11 +61,8 @@ public actor AVEWebSocketClient {
         self.transportFactory = transportFactory
         self.log = logger
         let (events, eventsOut) = AsyncStream<ClientEvent>.makeStream(bufferingPolicy: .unbounded)
-        let (audio, audioOut) = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
         self.events = events
         self.eventsOut = eventsOut
-        self.audio = audio
-        self.audioOut = audioOut
     }
 
     // MARK: API publique
@@ -116,7 +111,6 @@ public actor AVEWebSocketClient {
         transport = nil
         if fatal == nil { eventsOut.yield(.state(.closed)) }
         eventsOut.finish()
-        audioOut.finish()
     }
 
     // MARK: Boucle de connexion
@@ -135,7 +129,6 @@ public actor AVEWebSocketClient {
                 log.error("fatal error: \(fatal.rawValue)")
                 eventsOut.yield(.state(.failed(fatal)))
                 eventsOut.finish()
-                audioOut.finish()
                 return
             }
             // Le compteur repart de zéro à chaque `ready` (voir handleReady).
@@ -181,7 +174,7 @@ public actor AVEWebSocketClient {
                 let frame = try AudioFrame.decode(data)
                 guard frame.kind == .tts else { return }
                 guard accept(seq: frame.seq) else { return }
-                audioOut.yield(frame.payload)
+                eventsOut.yield(.audio(frame.payload))
             } catch {
                 log.error("bad binary frame")
             }
