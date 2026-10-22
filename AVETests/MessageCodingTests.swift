@@ -86,7 +86,7 @@ struct MessageCodingTests {
         #expect(voice == ServerFrame(seq: 3, event: .transcript(text: "bonjour", lang: "fra", confidence: 0.9, speculative: false, source: .voice)))
         let spec = try ServerFrame.decode(#"{"type":"transcript","seq":4,"text":"bon","lang":"fra","confidence":0.5,"speculative":true,"source":"voice"}"#)
         guard case .transcript(_, _, _, let speculative, _) = spec.event else { Issue.record("pas transcript"); return }
-        #expect(speculative)
+        #expect(speculative)  // "calculé d'avance", pas provisoire
         let echo = try ServerFrame.decode(#"{"type":"transcript","seq":5,"text":"salut","lang":"fra","confidence":1,"speculative":false,"source":"text"}"#)
         guard case .transcript(_, _, _, _, let source) = echo.event else { Issue.record("pas transcript"); return }
         #expect(source == .text)
@@ -122,9 +122,12 @@ struct MessageCodingTests {
     @Test("turn_error, y compris rate_limited")
     func turnErrors() throws {
         #expect(try ServerFrame.decode(#"{"type":"turn_error","seq":7,"code":"language_unavailable","message":"m","lang":"sus"}"#).event
-                == .turnError(code: "language_unavailable", message: "m", lang: "sus"))
-        #expect(try ServerFrame.decode(#"{"type":"turn_error","seq":8,"code":"rate_limited","message":"m"}"#).event
-                == .turnError(code: "rate_limited", message: "m", lang: nil))
+                == .turnError(code: "language_unavailable", message: "m", lang: "sus", retryAfterSeconds: nil))
+        #expect(try ServerFrame.decode(#"{"type":"turn_error","seq":8,"code":"rate_limited","message":"m","retry_after_s":3}"#).event
+                == .turnError(code: "rate_limited", message: "m", lang: nil, retryAfterSeconds: 3))
+        // un champ optionnel mal typé ne doit pas faire perdre l'erreur de tour
+        #expect(try ServerFrame.decode(#"{"type":"turn_error","seq":9,"code":"rate_limited","retry_after_s":"bientôt"}"#).event
+                == .turnError(code: "rate_limited", message: "", lang: nil, retryAfterSeconds: nil))
     }
 
     @Test("événements non numérotés : speech_start/end, language_set, replayed, pong, error")

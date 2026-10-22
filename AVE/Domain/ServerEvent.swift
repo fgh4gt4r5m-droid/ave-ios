@@ -7,7 +7,8 @@ public enum ServerEvent: Sendable, Equatable {
     case replayed(count: Int, gap: Bool)
     case pong(t: Double?)
     case error(code: String, message: String)
-    /// `source == .text` : écho d'un message `text` (confidence 1). `speculative` : résultat provisoire de l'ASR.
+    /// Exactement UN transcript par tour vocal, toujours FINAL. `source == .text` : écho d'un message `text`.
+    /// `speculative` veut dire « calculé d'avance » (vad:server), jamais « provisoire » : on l'affiche comme les autres.
     case transcript(text: String, lang: String, confidence: Double, speculative: Bool, source: TranscriptSource)
     /// Action métier à exécuter par l'application. `confirm == true` : accord explicite de l'utilisateur requis.
     case action(name: String, args: [String: JSONValue], confirm: Bool)
@@ -19,7 +20,8 @@ public enum ServerEvent: Sendable, Equatable {
     /// Une phrase de la réponse, émise avant son audio.
     case replyText(utteranceID: Int, text: String, lang: String)
     /// Échec d'un tour, session ouverte. `turn_end` suit, sauf pour `rate_limited`.
-    case turnError(code: String, message: String, lang: String?)
+    /// `retryAfterSeconds` : seulement pour `rate_limited` (entier ≥ 1).
+    case turnError(code: String, message: String, lang: String?, retryAfterSeconds: Int?)
     /// Détection de parole côté serveur (seulement avec `vad:"server"`) : ignorés par l'app (`vad:"client"`).
     case speechStart, speechEnd
     case languageSet(lang: String)
@@ -136,9 +138,20 @@ public struct ServerFrame: Sendable, Equatable {
             let b = try body(B.self)
             event = .replyText(utteranceID: b.utterance_id, text: b.text, lang: b.lang ?? "")
         case "turn_error":
-            struct B: Decodable { let code: String; let message: String?; let lang: String? }
+            struct B: Decodable {
+                let code: String; let message: String?; let lang: String?
+                let retry_after_s: Int?
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    code = try c.decode(String.self, forKey: .code)
+                    message = try? c.decodeIfPresent(String.self, forKey: .message)
+                    lang = try? c.decodeIfPresent(String.self, forKey: .lang)
+                    retry_after_s = try? c.decodeIfPresent(Int.self, forKey: .retry_after_s)
+                }
+                enum CodingKeys: String, CodingKey { case code, message, lang, retry_after_s }
+            }
             let b = try body(B.self)
-            event = .turnError(code: b.code, message: b.message ?? "", lang: b.lang)
+            event = .turnError(code: b.code, message: b.message ?? "", lang: b.lang, retryAfterSeconds: b.retry_after_s)
         case "speech_start":
             event = .speechStart
         case "speech_end":

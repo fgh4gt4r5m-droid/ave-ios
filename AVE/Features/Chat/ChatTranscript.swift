@@ -55,9 +55,8 @@ public struct ChatTranscript: Sendable, Equatable {
     @discardableResult
     public mutating func apply(_ event: ServerEvent) -> ChatMessage? {
         switch event {
-        case .transcript(let text, _, _, let speculative, _):
-            // Un résultat provisoire de l'ASR sera remplacé par le final : pas de bulle.
-            guard !speculative else { break }
+        case .transcript(let text, _, _, _, _):
+            // Un seul transcript par tour, toujours final (`speculative` = calculé d'avance, pas provisoire).
             append(role: .user, text: text, status: .complete)
             currentAssistantID = nil
 
@@ -85,9 +84,9 @@ public struct ChatTranscript: Sendable, Equatable {
         case .interrupted:
             finishAssistant(.interrupted)
 
-        case .turnError(let code, _, _):
+        case .turnError(let code, _, _, let retryAfter):
             finishAssistant(.interrupted)
-            appendSystem(UserMessages.turnError(code: code))
+            appendSystem(UserMessages.turnError(code: code, retryAfterSeconds: retryAfter))
 
         case .action(let name, let args, let confirm):
             let card = ActionCard(name: name, args: args, requiresConfirmation: confirm,

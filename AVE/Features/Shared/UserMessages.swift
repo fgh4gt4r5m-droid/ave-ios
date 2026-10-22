@@ -3,7 +3,7 @@ import AVECore
 /// Textes affichés à l'utilisateur. Honnêtes : aucune promesse de latence, aucune langue annoncée
 /// comme disponible si le serveur n'a pas de moteur.
 public enum UserMessages {
-    public static func turnError(code: String) -> String {
+    public static func turnError(code: String, retryAfterSeconds: Int? = nil) -> String {
         switch code {
         case "language_unavailable":
             return "Cette langue n'a pas encore de moteur vocal. Choisissez le français pour parler avec l'assistant."
@@ -16,7 +16,8 @@ public enum UserMessages {
         case "asr_failed":
             return "Je n'ai pas pu comprendre l'audio. Vous pouvez réessayer."
         case "rate_limited":
-            return "Vous envoyez trop de messages. Patientez un instant."
+            guard let seconds = retryAfterSeconds, seconds >= 1 else { return "Vous envoyez trop de messages. Patientez un instant." }
+            return "Vous envoyez trop de messages. Réessayez dans \(seconds) s."
         default:
             return "Un problème est survenu pendant cette réponse. Vous pouvez réessayer."
         }

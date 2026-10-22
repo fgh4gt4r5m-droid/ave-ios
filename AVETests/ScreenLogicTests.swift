@@ -38,11 +38,11 @@ struct ChatTranscriptTests {
         #expect(t.messages.count == 1 && t.messages[0].role == .user && t.messages[0].text == "salut")
     }
 
-    @Test("transcription provisoire : aucune bulle")
-    func speculativeIgnored() {
+    @Test("transcript speculative:true = calculé d'avance, donc FINAL : la bulle apparaît")
+    func speculativeIsFinal() {
         var t = ChatTranscript()
-        t.apply(transcript("bon", speculative: true))
-        #expect(t.messages.isEmpty)
+        t.apply(transcript("bonjour", speculative: true))
+        #expect(t.messages.count == 1 && t.messages[0].text == "bonjour")
     }
 
     @Test("sans reply_text : bulle « réponse vocale », puis texte si reply_text arrive")
@@ -74,11 +74,13 @@ struct ChatTranscriptTests {
     @Test("turn_error : message système honnête, rate_limited compris")
     func turnError() {
         var t = ChatTranscript()
-        t.apply(.turnError(code: "language_unavailable", message: "", lang: "sus"))
+        t.apply(.turnError(code: "language_unavailable", message: "", lang: "sus", retryAfterSeconds: nil))
         #expect(t.messages.last?.role == .system && t.messages.last?.text.contains("moteur vocal") == true)
-        t.apply(.turnError(code: "rate_limited", message: "", lang: nil))
+        t.apply(.turnError(code: "rate_limited", message: "", lang: nil, retryAfterSeconds: nil))
         #expect(t.messages.last?.text.contains("trop de messages") == true)
-        t.apply(.turnError(code: "code_inconnu", message: "", lang: nil))
+        t.apply(.turnError(code: "rate_limited", message: "", lang: nil, retryAfterSeconds: 3))
+        #expect(t.messages.last?.text.contains("3 s") == true)
+        t.apply(.turnError(code: "code_inconnu", message: "", lang: nil, retryAfterSeconds: nil))
         #expect(t.messages.last?.role == .system)
     }
 
