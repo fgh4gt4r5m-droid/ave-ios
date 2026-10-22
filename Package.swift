@@ -15,14 +15,16 @@ let package = Package(
         .target(
             name: "AVECore",
             path: "AVE",
-            exclude: ["Kit"],
+            exclude: ["Kit", "Core/Audio"],
             sources: ["Domain", "Core/Network", "Core/Storage"]  // pur Foundation : pas d'UI, pas d'AVFoundation
         ),
         // AVEKit : brique intégrable (WoYo, TaGa…). Grossira avec l'audio, la session et l'UI partageable.
         .target(
             name: "AVEKit",
             dependencies: ["AVECore"],
-            path: "AVE/Kit"
+            path: "AVE",
+            exclude: ["Domain", "Core/Network", "Core/Storage"],
+            sources: ["Kit", "Core/Audio"]  // Core/Audio : logique pure partout, AVFoundation sous #if os(iOS)
         ),
         .testTarget(
             name: "AVETests",

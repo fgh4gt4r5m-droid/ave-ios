@@ -1,3 +1,4 @@
+import AVECore
 import Foundation
 
 /// Configuration d'AVE pour une app (l'app AVE elle-même ou une app hôte qui intègre AVEKit).
