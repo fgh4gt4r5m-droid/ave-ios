@@ -117,6 +117,43 @@ struct ChatTranscriptTests {
     }
 }
 
+@Suite("Live Activity et palette")
+struct BrandAndActivityTests {
+    @Test("la Live Activity suit l'orbe ; session perdue = arrêt (nil)")
+    func phaseMapping() {
+        #expect(LiveActivityPhase(orb: .listening) == .listening)
+        #expect(LiveActivityPhase(orb: .speaking) == .speaking)
+        #expect(LiveActivityPhase(orb: .interrupted) == .interrupted)
+        #expect(LiveActivityPhase(orb: .reconnecting) == .reconnecting)
+        #expect(LiveActivityPhase(orb: .unavailable) == nil)
+    }
+
+    @Test("libellés et symboles distincts ; état sérialisable (aucun texte de conversation)")
+    func phaseContent() {
+        let all: [LiveActivityPhase] = [.idle, .listening, .thinking, .speaking, .interrupted, .reconnecting]
+        #expect(Set(all.map(\.label)).count == all.count && Set(all.map(\.symbolName)).count == all.count)
+        #expect(all.allSatisfy { LiveActivityPhase(rawValue: $0.rawValue) == $0 })
+    }
+
+    @Test("conversion hexadécimale")
+    func hex() {
+        let c = AVEColor(hex: 0x5EA0FD)
+        #expect(c.red == 0x5E && c.green == 0xA0 && c.blue == 0xFD)
+    }
+
+    @Test("contrastes WCAG des couples de la charte (texte ≥ 4,5 ; décor ≥ 3)")
+    func contrasts() {
+        let p = AVEPalette.self
+        #expect(p.navy.contrast(with: p.blue) >= 4.5)      // texte et icônes sur l'accent
+        #expect(p.white.contrast(with: p.surface) >= 4.5)  // bulles de l'assistant
+        #expect(p.amber.contrast(with: p.navy) >= 4.5)     // avertissements sur le fond
+        #expect(p.amber.contrast(with: p.surface) >= 4.5)
+        #expect(p.blue.contrast(with: p.navy) >= 4.5)
+        #expect(p.violet.contrast(with: p.navy) >= 3)      // décor seulement
+        #expect(p.white.contrast(with: p.blue) < 4.5)      // piège connu : blanc sur bleu vif = insuffisant
+    }
+}
+
 @Suite("Orbe, langues, textes")
 struct PresentationTests {
     @Test("l'état de l'orbe suit la phase quand la connexion est ouverte")

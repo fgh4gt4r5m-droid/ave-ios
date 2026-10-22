@@ -32,7 +32,7 @@ public struct FloatingVoiceOrbView: View {
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: scale)
                 Image(systemName: state.symbolName)
                     .font(.title2.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(theme.onAccent)
                     .symbolEffect(.pulse, isActive: state == .thinking && !reduceMotion)
             }
             .frame(width: 72, height: 72)

@@ -28,6 +28,9 @@ struct RootView: View {
             }
         }
         .task { build() }
+        .environment(\.aveTheme, .ave)
+        .background((AVETheme.ave.background ?? .black).ignoresSafeArea())
+        .preferredColorScheme(.dark)
     }
 
     private func build() {

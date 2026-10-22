@@ -43,6 +43,14 @@ final class FakeLifecycle: AudioLifecycle, @unchecked Sendable {
     func deactivate() {}
 }
 
+@MainActor
+final class FakeActivity: SessionActivityPresenting {
+    private(set) var calls: [String] = []
+    func start() { calls.append("start") }
+    func update(_ phase: LiveActivityPhase) { calls.append("update:\(phase.rawValue)") }
+    func end() { calls.append("end") }
+}
+
 final class ActionBox: @unchecked Sendable {
     private let lock = NSLock()
     private var _names: [String] = []
@@ -59,7 +67,7 @@ struct Harness {
     let player = FakePlayer()
     let actions = ActionBox()
 
-    init(permission: Bool = true, turnTimeout: Duration = .seconds(30)) throws {
+    init(permission: Bool = true, turnTimeout: Duration = .seconds(30), activity: (any SessionActivityPresenting)? = nil) throws {
         guard let url = URL(string: "wss://ave.test/v1/stream") else { throw Bad() }
         let client = AVEWebSocketClient(
             configuration: .init(endpoint: try AVEEndpoint(url), lang: .french,
@@ -75,7 +83,7 @@ struct Harness {
         coordinator = SessionCoordinator(
             client: client,
             devices: AudioDevices(mic: mic, player: player, lifecycle: FakeLifecycle(permission: permission)),
-            configuration: config)
+            configuration: config, activity: activity)
         let box = actions
         coordinator.onAction = { card in box.add(card.name) }
     }
@@ -277,6 +285,37 @@ struct SessionCoordinatorTests {
         let t1 = try #require(await h.factory.waitForTransport(1))
         t1.serverReady(session: "autre", resumed: false)
         #expect(await eventually { await h.coordinator.notice == UserMessages.sessionRestarted })
+        await h.coordinator.stop()
+    }
+
+    @Test("Live Activity : démarrée à l'ouverture, seulement les changements d'état, terminée à l'arrêt")
+    func liveActivityLifecycle() async throws {
+        let fake = FakeActivity()
+        let h = try Harness(activity: fake)
+        await h.coordinator.start()
+        #expect(fake.calls.isEmpty)  // rien tant que la session n'est pas ouverte
+        let t = try #require(await h.factory.waitForTransport(0))
+        t.serverReady()
+        #expect(await eventually { await fake.calls.count >= 2 })
+        #expect(fake.calls.prefix(2) == ["start", "update:idle"])
+        await h.speakOneUtterance()
+        #expect(fake.calls.contains("update:listening") && fake.calls.contains("update:thinking"))
+        zip(fake.calls, fake.calls.dropFirst()).forEach { #expect($0 != $1) }  // aucune mise à jour redondante
+        #expect(fake.calls.filter { $0 == "start" }.count == 1)
+        await h.coordinator.stop()
+        #expect(fake.calls.last == "end" && fake.calls.filter { $0 == "end" }.count == 1)
+    }
+
+    @Test("Live Activity : jamais démarrée si la session échoue d'emblée, aucun état ne fuite")
+    func liveActivityNeverStartedOnFatal() async throws {
+        let fake = FakeActivity()
+        let h = try Harness(activity: fake)
+        await h.coordinator.start()
+        let t = try #require(await h.factory.waitForTransport(0))
+        t.serverSend(#"{"type":"error","code":"unauthorized","message":"m"}"#)
+        t.serverDrop()
+        #expect(await eventually { await h.coordinator.orbState == .unavailable })
+        #expect(fake.calls.isEmpty)
         await h.coordinator.stop()
     }
 

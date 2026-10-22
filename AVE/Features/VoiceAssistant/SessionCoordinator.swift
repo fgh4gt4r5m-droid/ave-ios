@@ -47,6 +47,9 @@ public final class SessionCoordinator {
     @ObservationIgnored private let client: AVEWebSocketClient
     @ObservationIgnored private let devices: AudioDevices
     @ObservationIgnored private let configuration: Configuration
+    @ObservationIgnored private let activity: (any SessionActivityPresenting)?
+    @ObservationIgnored private var activityStarted = false
+    @ObservationIgnored private var lastActivityPhase: LiveActivityPhase?
     @ObservationIgnored private var machine = BargeInStateMachine()
     @ObservationIgnored private var vad: VoiceActivityDetector
     @ObservationIgnored private var preRoll: PreRollBuffer
@@ -60,7 +63,8 @@ public final class SessionCoordinator {
     @ObservationIgnored private var replayCache: [(id: Int, chunks: [Data], bytes: Int)] = []
 
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
-                configuration: Configuration = Configuration()) {
+                configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil) {
+        self.activity = activity
         self.client = client
         self.devices = devices
         self.mode = mode
@@ -106,6 +110,10 @@ public final class SessionCoordinator {
         stopMic()
         devices.player.purge()
         devices.lifecycle.deactivate()
+        if activityStarted {
+            activity?.end()
+            activityStarted = false
+        }
         await client.stop()
     }
 
@@ -341,8 +349,32 @@ public final class SessionCoordinator {
         devices.player.purge()
     }
 
+    /// Live Activity : démarre à l'ouverture de la session, ne reçoit que les CHANGEMENTS d'état, s'arrête quand la session est perdue.
+    private func refreshActivity() {
+        guard let activity else { return }
+        guard let current = LiveActivityPhase(orb: orbState) else {
+            if activityStarted {
+                activity.end()
+                activityStarted = false
+                lastActivityPhase = nil
+            }
+            return
+        }
+        if !activityStarted {
+            guard case .open = connection else { return }
+            activity.start()
+            activityStarted = true
+            lastActivityPhase = nil
+        }
+        if current != lastActivityPhase {
+            lastActivityPhase = current
+            activity.update(current)
+        }
+    }
+
     private func syncPhase() {
         phase = machine.phase
+        refreshActivity()
         if phase == .thinking {
             guard turnTimer == nil else { return }
             let timeout = configuration.turnTimeout
