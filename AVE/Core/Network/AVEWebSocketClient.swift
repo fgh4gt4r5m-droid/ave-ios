@@ -13,12 +13,16 @@ public actor AVEWebSocketClient {
         public var deadPeerTimeout: Duration?
         public var micQueueCapacity: Int
         public var clientInfo: ClientInfo?
+        /// Demander les fragments `reply_delta` (D7, `hello.output` + `"text_delta"`). Faux par défaut : une app hôte
+        /// qui n'affiche pas les fragments n'en reçoit pas.
+        public var textDelta: Bool
 
         public init(endpoint: AVEEndpoint, lang: AVELanguage = .auto, sampleRate: Int = 16_000,
                     backoff: Backoff = Backoff(), pingInterval: Duration = .seconds(15),
                     deadPeerTimeout: Duration? = .seconds(45), micQueueCapacity: Int = 500,
-                    clientInfo: ClientInfo? = nil) {
+                    clientInfo: ClientInfo? = nil, textDelta: Bool = false) {
             self.clientInfo = clientInfo
+            self.textDelta = textDelta
             self.endpoint = endpoint
             self.lang = lang
             self.sampleRate = sampleRate
@@ -55,6 +59,13 @@ public actor AVEWebSocketClient {
     private var pendingEndOfSpeech: [(afterMicSeq: UInt32, meta: [String: JSONValue]?)] = []
     private var reconnectAttempt = 0
     private var lastInbound = ContinuousClock.now
+    /// Contexte à envoyer après chaque `ready` NEUF (conversation rouverte, ou session expirée en cours de route : D9).
+    private var contextProvider: (@Sendable () async -> [ContextMessage])?
+    private var contextSentOnThisConnection = false
+    /// Repli si le moteur en ligne est plus ancien que d14a002 : il refuserait `text_delta` (`bad_output`, fatal) ou
+    /// `context` (`bad_context` / `unknown_type`, fermeture). On se reconnecte alors sans, au lieu de rester bloqué.
+    private var textDeltaRefused = false
+    private var contextRefused = false
 
     public init(configuration: Configuration,
                 tokenProvider: @escaping AVETokenProvider = { nil },
@@ -74,6 +85,12 @@ public actor AVEWebSocketClient {
 
     /// Vrai quand `ready` est reçu et la file micro renvoyée (utile aux tests et à l'UI de debug).
     var isReadyState: Bool { isReady }
+
+    /// Fournit le contexte à envoyer au début d'une session neuve (D9). Appelé AVANT `start()` ; un tableau vide :
+    /// rien n'est envoyé.
+    public func setContextProvider(_ provider: @escaping @Sendable () async -> [ContextMessage]) {
+        contextProvider = provider
+    }
 
     public func start() {
         guard runTask == nil, !stopped else { return }
@@ -216,10 +233,12 @@ public actor AVEWebSocketClient {
             // Peut aller chercher un jeton frais auprès de l'hôte (WoYo, TaGa…) ; une erreur ici
             // fait échouer la tentative, qui sera rejouée avec le backoff.
             let token = try await tokenProvider()
+            contextSentOnThisConnection = false
             let hello = ClientMessage.Hello(
                 lang: language, sampleRate: config.sampleRate,
                 sessionID: sessionID, lastSeq: sessionID == nil ? nil : lastSeq,
-                token: token, vad: .client, client: config.clientInfo)
+                token: token, vad: .client, client: config.clientInfo,
+                output: config.textDelta && !textDeltaRefused ? ["audio", "text", "actions", "text_delta"] : nil)
             try await t.send(.text(ClientMessage.hello(hello).jsonString()))
             lastInbound = .now
             for try await message in t.incoming {
@@ -275,6 +294,16 @@ public actor AVEWebSocketClient {
             eventsOut.yield(.replayGap(count: count, gap: gap))
         case .pong:
             break
+        case .error(let code, _) where code == "bad_output" && config.textDelta && !textDeltaRefused:
+            // Moteur trop ancien pour `text_delta` : on se reconnecte sans (les `reply_text` suffisent à l'affichage).
+            log.info("text_delta refused, reconnecting without it")
+            textDeltaRefused = true
+        case .error(let code, _) where (code == "bad_context" || code == "unknown_type") && contextSentOnThisConnection:
+            // Contexte refusé : on se reconnecte sans ; l'app dit que l'assistant repart sans mémoire.
+            log.info("context refused, reconnecting without it")
+            contextRefused = true
+            // Un seul signal pour l'app, quel que soit le code du moteur : un autre `unknown_type` n'est pas confondu.
+            eventsOut.yield(.server(.error(code: "bad_context", message: "")))
         case .error(let code, _):
             if let f = AVEFatalError(code: code) {
                 fatal = f
@@ -296,6 +325,14 @@ public actor AVEWebSocketClient {
             // Session neuve (la précédente a expiré, ou première connexion) : la numérotation
             // serveur repart de zéro ; garder l'ancien lastSeq ferait ignorer toutes les réponses.
             lastSeq = 0
+            // Contexte (D9) AVANT toute entrée : `isReady` est encore faux, donc aucun texte ne peut passer devant.
+            if !contextRefused, let contextProvider {
+                let messages = await contextProvider()
+                if !messages.isEmpty {
+                    await send(message: .context(messages))
+                    contextSentOnThisConnection = true
+                }
+            }
         }
         // Renvoi dans l'ordre : micro manquant (seq > last_mic_seq) et end_of_speech en attente.
         // `isReady` ne passe à vrai qu'une fois tout renvoyé : un chunk produit pendant le renvoi

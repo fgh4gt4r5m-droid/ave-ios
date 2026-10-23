@@ -94,8 +94,10 @@ public final class DemoEngineTransport: WebSocketTransport, @unchecked Sendable 
             // Un temps de « réflexion » réaliste, pour voir l'état et le logo.
             await self?.pause(reply == nil ? 300 : 1400)
             guard let self, !Task.isCancelled else { return }
-            for sentence in reply ?? [] {
-                self.emit(["type": "reply_text", "utterance_id": id, "text": sentence, "lang": "fra"])
+            for (index, sentence) in (reply ?? []).enumerated() {
+                // Texte exact, comme le moteur (D7) : le séparateur fait partie de la phrase suivante.
+                let exact = index == 0 ? sentence : " " + sentence
+                self.emit(["type": "reply_text", "utterance_id": id, "text": exact, "lang": "fra"])
                 await self.pause(350)
                 if Task.isCancelled { return }
             }

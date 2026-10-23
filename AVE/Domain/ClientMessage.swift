@@ -21,6 +21,8 @@ public enum ClientMessage: Sendable, Equatable {
     case task(MediaTaskRequest)
     /// Pas de réponse directe : la tâche émet `task_error {code:"cancelled"}`.
     case taskCancel(taskID: String)
+    /// Contexte d'une conversation rouverte (D9) : une fois, juste après un `ready` neuf, avant toute entrée.
+    case context([ContextMessage])
 
     public struct Hello: Sendable, Equatable {
         public var version: Int = 1
@@ -36,11 +38,15 @@ public enum ClientMessage: Sendable, Equatable {
         /// transmet le micro que pendant la parole (économie de débit en 3G) et signale `end_of_speech`.
         public var vad: VADMode?
         public var client: ClientInfo?
+        /// `nil` : le défaut du serveur (`audio`, `text`, `actions`). Avec `text_delta` (D7) : fragments `reply_delta`.
+        public var output: [String]?
 
         public init(lang: AVELanguage, sampleRate: Int = 16_000, sessionID: String? = nil,
-                    lastSeq: UInt32? = nil, token: String? = nil, vad: VADMode? = nil, client: ClientInfo? = nil) {
+                    lastSeq: UInt32? = nil, token: String? = nil, vad: VADMode? = nil, client: ClientInfo? = nil,
+                    output: [String]? = nil) {
             self.vad = vad
             self.client = client
+            self.output = output
             self.lang = lang
             self.sampleRate = sampleRate
             self.sessionID = sessionID
@@ -59,6 +65,7 @@ extension ClientMessage: Encodable {
         // Tâches (E16)
         case prompt, size, quality, ref, fileID = "file_id", instruction, rightsConfirmed = "rights_confirmed"
         case target, aspect, action, targetLang = "target_lang", taskID = "task_id"
+        case output, messages
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -75,6 +82,7 @@ extension ClientMessage: Encodable {
             try c.encodeIfPresent(h.token, forKey: .token)
             try c.encodeIfPresent(h.vad?.rawValue, forKey: .vad)
             try c.encodeIfPresent(h.client, forKey: .client)
+            try c.encodeIfPresent(h.output, forKey: .output)
         case .endOfSpeech(let meta):
             try c.encode("end_of_speech", forKey: .type)
             try c.encodeIfPresent(meta, forKey: .meta)
@@ -137,6 +145,9 @@ extension ClientMessage: Encodable {
         case .taskCancel(let taskID):
             try c.encode("task_cancel", forKey: .type)
             try c.encode(taskID, forKey: .taskID)
+        case .context(let messages):
+            try c.encode("context", forKey: .type)
+            try c.encode(messages, forKey: .messages)
         }
     }
 
@@ -174,4 +185,21 @@ public enum AVEProtocolError: Error, Equatable, Sendable {
     case unexpectedKind(UInt8)
     case invalidUTF8
     case malformedEvent(type: String)
+}
+
+/// Un message du contexte d'une conversation rouverte (D9). Bornes du moteur : `text` de 1 à 4000 caractères,
+/// 20 messages et 8000 caractères en tout (au-delà, il garde les plus récents). Voir `ConversationContext`.
+public struct ContextMessage: Sendable, Equatable, Encodable {
+    public enum Role: String, Sendable, Equatable, Encodable { case user, assistant }
+    public let role: Role
+    public let text: String
+
+    public init(role: Role, text: String) {
+        self.role = role
+        self.text = text
+    }
+
+    public static let maxTextCharacters = 4000
+    public static let maxMessages = 20
+    public static let maxTotalCharacters = 8000
 }

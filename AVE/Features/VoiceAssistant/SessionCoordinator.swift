@@ -142,6 +142,11 @@ public final class SessionCoordinator {
 
     public func start() async {
         guard tasks.isEmpty else { return }
+        // D9 : à chaque session neuve, le moteur reçoit les derniers échanges affichés (conversation rouverte, ou session
+        // expirée en cours de route) ; l'assistant ne repart plus de zéro.
+        await client.setContextProvider { [weak self] in
+            await self?.contextForNewSession() ?? []
+        }
         do { try devices.lifecycle.activate() } catch {
             notice = UserMessages.audioUnavailable
             mode = .text
@@ -515,7 +520,7 @@ public final class SessionCoordinator {
     private func handle(server event: ServerEvent) async {
         if discardingTurn {
             switch event {
-            case .replyText, .ttsStart, .ttsEnd, .action:
+            case .replyText, .replyDelta, .ttsStart, .ttsEnd, .action:
                 return  // reliquat du tour arrêté
             case .turnEnd, .turnError, .transcript:
                 discardingTurn = false
@@ -572,8 +577,15 @@ public final class SessionCoordinator {
             if stored { learningMessage = UserMessages.feedbackThanks }
         case .taskStarted, .taskDone, .taskError:
             handleTask(event)
-        case .action, .replyText, .transcript:
+        case .action, .replyText, .replyDelta, .transcript:
             if let auto = transcript.apply(event), let card = auto.card { onAction?(card) }
+        case .contextAck(let kept, let dropped):
+            // Le moteur a repris les derniers échanges : la session ne « repart » plus de zéro.
+            if notice == UserMessages.sessionRestarted { notice = nil }
+            if dropped > 0 { transcript.appendSystem(UserMessages.contextTrimmed(kept: kept)) }
+        case .error(let code, _) where code == "bad_context":
+            // Contexte refusé (moteur ancien) : le client se reconnecte sans ; l'app le dit.
+            transcript.appendSystem(UserMessages.resumedWithoutMemory)
         default:
             break
         }
@@ -661,6 +673,11 @@ public final class SessionCoordinator {
             turnTimer?.cancel()
             turnTimer = nil
         }
+    }
+
+    /// Les derniers échanges affichés, aux bornes du moteur (D9). Vide pour une conversation neuve.
+    func contextForNewSession() -> [ContextMessage] {
+        ConversationContext.messages(from: transcript.messages)
     }
 
     private func turnTimedOut() async {

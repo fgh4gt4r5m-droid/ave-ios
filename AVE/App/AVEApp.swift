@@ -196,8 +196,9 @@ struct RootView: View {
         showHistory = false
         guard conversation.id != currentConversationID else { return }
         currentConversationID = conversation.id
-        await rebuild(kind: kind,
-                      transcript: ChatTranscript(restoring: conversation.messages, notice: UserMessages.resumedWithoutMemory))
+        // D9 : la nouvelle session reçoit les derniers échanges ; l'avis « sans mémoire » n'apparaît que si le moteur
+        // refuse le contexte (`SessionCoordinator`).
+        await rebuild(kind: kind, transcript: ChatTranscript(restoring: conversation.messages))
     }
 
     private func rebuild(kind: AccountKind, transcript: ChatTranscript) async {
@@ -305,7 +306,7 @@ struct RootView: View {
         }
         let configuration = AVEConfiguration(
             endpoint: env.endpoint, defaultLanguage: language.language,
-            tokenProvider: tokenProvider, logger: .system, clientInfo: env.clientInfo)
+            tokenProvider: tokenProvider, logger: .system, clientInfo: env.clientInfo, textDelta: true)
         let client = env.demoOffline
             ? configuration.makeClient(language: language.language, transportFactory: DemoEngineTransport.factory)
             : configuration.makeClient(language: language.language)

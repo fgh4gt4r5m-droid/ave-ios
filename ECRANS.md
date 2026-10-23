@@ -132,7 +132,13 @@ Validées une par une par le propriétaire sur la page « Validation des maquett
 - **Mention d'essai** : suit `ready.engine` (D6) à chaque session : écho et son de test → mention complète ; dialogue
   réel et voix de test → « la voix de l'assistant est un son de test » ; tout réel → aucune. Sans `engine` (moteur ancien,
   démo hors ligne) : le réglage du build.
-- **Pas encore codé, en attente du moteur** : affichage au fil de l'eau par fragments et assemblage exact (D7), sources
-  (D8, après le choix du moteur de recherche), mémoire d'une conversation rouverte (D9), titre généré (D10). Tant que D7
-  n'est pas en ligne, l'app colle encore les phrases avec une espace : une liste reçue en morceaux peut s'afficher sur une
-  ligne.
+- **Réponse au fil de l'eau (D7, moteur `main` @ `d14a002`, en ligne)** : l'app demande `text_delta` et affiche les
+  `reply_delta` ; les `reply_text` ne servent plus qu'à la voix (jamais les deux). Sans fragments, les `reply_text` sont
+  concaténés SANS rien ajouter : le texte du moteur est exact, listes et tableaux restent intacts. Repli : un moteur ancien
+  qui refuse `text_delta` (`bad_output`) fait reconnecter sans.
+- **Mémoire (D9)** : à chaque session neuve (conversation rouverte, ou session expirée en cours de route), l'app envoie
+  les derniers échanges lisibles (`ConversationContext` : 20 messages, 4000 caractères chacun, 8000 en tout) AVANT toute
+  entrée. L'avis « l'assistant ne se souvient pas » n'apparaît plus que si le moteur refuse le contexte (l'app se
+  reconnecte alors sans) ; « se souvient des N derniers messages » si le moteur en a écarté.
+- **Pas encore codé, en attente du moteur** : sources (D8, après le choix du moteur de recherche par le propriétaire),
+  titre généré (D10). Non vérifié : fluidité des fragments sur un vrai téléphone, comportement avec le vrai modèle.

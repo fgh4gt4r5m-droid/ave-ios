@@ -162,8 +162,10 @@ Règles du client (`AVEWebSocketClient`) :
 3. Échange de jeton court (`POST /v1/token`) pour ne pas embarquer une clé durable dans l'app.
 4. **Pièces jointes** : FAIT côté moteur (E16, E17, `contrat/` fusionné) et codé dans l'app le 2026-10-23 (`ECRANS.md`,
    « Fichiers, documents et images ») ; non compilé à la date de l'écriture, rien n'a tourné sur iPhone.
-5. **Reprise d'une conversation avec son contexte** : aujourd'hui l'historique est local et l'assistant repart sans mémoire.
-6. **Réponses écrites au fil de l'eau** (morceaux de phrase) et **choix de la voix** : rendus attendus des grandes apps.
+5. **Reprise d'une conversation avec son contexte** : FAIT (D9, `context`, moteur `main` @ `d14a002`), codé dans l'app le
+   2026-10-23 (`ConversationContext`).
+6. **Réponses écrites au fil de l'eau** : FAIT (D7, `text_delta` / `reply_delta`), codé dans l'app le 2026-10-23. Reste :
+   **choix de la voix**.
 7. **Génération de documents ou d'images** par l'assistant : outils côté moteur (appels d'outils du LLM), jamais dans l'app.
    Décision du propriétaire (2026-10-23) : **modèle d'images libre HÉBERGÉ par TAM, sans appeler d'API tierce**.
    Pistes à licence permissive (à vérifier sur la fiche de chaque modèle) : Z-Image-Turbo, Qwen-Image, FLUX.1 [schnell]

@@ -14,7 +14,8 @@ struct ChatTranscriptTests {
         var t = ChatTranscript()
         t.apply(transcript("bonjour"))
         t.apply(.replyText(utteranceID: 2, text: "Bonjour !", lang: "fra"))
-        t.apply(.replyText(utteranceID: 2, text: "Comment puis-je aider ?", lang: "fra"))
+        // Texte exact (D7) : le séparateur fait partie de la phrase suivante ; l'app n'ajoute rien.
+        t.apply(.replyText(utteranceID: 2, text: " Comment puis-je aider ?", lang: "fra"))
         t.apply(.turnEnd(utteranceID: 2, interrupted: false))
         #expect(t.messages.count == 2)
         #expect(t.messages[0].role == .user && t.messages[0].text == "bonjour")

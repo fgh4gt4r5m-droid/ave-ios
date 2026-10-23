@@ -62,6 +62,10 @@ public enum UserMessages {
     public static let textTooLong = "Message trop long (4 000 caractères au maximum)."
     /// Historique gardé sur l'iPhone : le moteur, lui, ne se souvient pas d'une session à l'autre.
     public static let resumedWithoutMemory = "Conversation reprise : l'assistant ne se souvient pas de ce qui précède."
+    /// D9 : la conversation rouverte était plus longue que ce que le moteur garde.
+    public static func contextTrimmed(kept: Int) -> String {
+        "Conversation reprise : l'assistant se souvient des \(kept) derniers messages."
+    }
     public static let waitingForNetwork = "En attente du réseau"
     public static let offlineQueued = "Hors connexion. Vos messages partiront au retour du réseau."
     /// État réel du moteur au 2026-10-23 (dialogue en écho, voix de test). Affiché seulement si l'app l'active.

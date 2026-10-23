@@ -49,6 +49,8 @@ public struct ChatTranscript: Sendable, Equatable {
     /// Message assistant en cours de construction (phrase par phrase via `reply_text`).
     public private(set) var currentAssistantID: Int?
     private var nextID = 1
+    /// Tours dont la réponse arrive en fragments (D7) : leurs `reply_text` ne servent plus qu'à la voix.
+    private var deltaUtterances: Set<Int> = []
 
     public init() {}
 
@@ -82,16 +84,13 @@ public struct ChatTranscript: Sendable, Equatable {
             currentAssistantID = nil
 
         case .replyText(let utteranceID, let text, _):
-            if let i = currentIndex(utterance: utteranceID) {
-                if messages[i].isVoiceOnly {
-                    messages[i].text = text
-                    messages[i].isVoiceOnly = false
-                } else {
-                    messages[i].text += " " + text
-                }
-            } else {
-                currentAssistantID = append(role: .assistant, text: text, status: .streaming, utteranceID: utteranceID)
-            }
+            // Fragments déjà affichés pour ce tour : ils couvrent ce `reply_text` (jamais les deux, D7).
+            guard !deltaUtterances.contains(utteranceID) else { break }
+            appendReply(text, utteranceID: utteranceID)
+
+        case .replyDelta(let utteranceID, let text):
+            deltaUtterances.insert(utteranceID)
+            appendReply(text, utteranceID: utteranceID)
 
         case .ttsStart(let utteranceID, _, _):
             if currentIndex(utterance: utteranceID) == nil {
@@ -229,6 +228,21 @@ public struct ChatTranscript: Sendable, Equatable {
     private func currentIndex(utterance: Int) -> Int? {
         guard let id = currentAssistantID, let i = index(of: id), messages[i].utteranceID == utterance else { return nil }
         return i
+    }
+
+    /// Texte EXACT (D7) : le moteur fournit les espaces et les retours à la ligne ; concaténer sans rien ajouter garde
+    /// intacts les listes, titres et tableaux.
+    private mutating func appendReply(_ text: String, utteranceID: Int) {
+        if let i = currentIndex(utterance: utteranceID) {
+            if messages[i].isVoiceOnly {
+                messages[i].text = text
+                messages[i].isVoiceOnly = false
+            } else {
+                messages[i].text += text
+            }
+        } else {
+            currentAssistantID = append(role: .assistant, text: text, status: .streaming, utteranceID: utteranceID)
+        }
     }
 
     private mutating func finishAssistant(_ status: ChatMessage.Status) {

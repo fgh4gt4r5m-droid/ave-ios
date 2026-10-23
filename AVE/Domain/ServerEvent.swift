@@ -19,6 +19,11 @@ public enum ServerEvent: Sendable, Equatable {
     case interrupted
     /// Une phrase de la réponse, émise avant son audio.
     case replyText(utteranceID: Int, text: String, lang: String)
+    /// Fragment brut de la réponse écrite (D7, demandé par `hello.output: "text_delta"`), numéroté et rejoué.
+    /// Afficher les fragments OU les `reply_text`, jamais les deux.
+    case replyDelta(utteranceID: Int, text: String)
+    /// Contexte reçu (D9) : messages gardés, et écartés (les plus anciens au-delà des bornes). Non numéroté.
+    case contextAck(kept: Int, dropped: Int)
     /// Échec d'un tour, session ouverte. `turn_end` suit, sauf pour `rate_limited`.
     /// `retryAfterSeconds` : seulement pour `rate_limited` (entier ≥ 1).
     case turnError(code: String, message: String, lang: String?, retryAfterSeconds: Int?)
@@ -183,6 +188,14 @@ public struct ServerFrame: Sendable, Equatable {
             struct B: Decodable { let utterance_id: Int; let text: String; let lang: String? }
             let b = try body(B.self)
             event = .replyText(utteranceID: b.utterance_id, text: b.text, lang: b.lang ?? "")
+        case "reply_delta":
+            struct B: Decodable { let utterance_id: Int; let text: String }
+            let b = try body(B.self)
+            event = .replyDelta(utteranceID: b.utterance_id, text: b.text)
+        case "context_ack":
+            struct B: Decodable { let kept: Int; let dropped: Int }
+            let b = try body(B.self)
+            event = .contextAck(kept: b.kept, dropped: b.dropped)
         case "turn_error":
             struct B: Decodable {
                 let code: String; let message: String?; let lang: String?
