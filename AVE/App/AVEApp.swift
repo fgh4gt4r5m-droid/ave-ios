@@ -116,7 +116,7 @@ struct RootView: View {
                          firstName: $firstName, language: $language, autoPlay: $autoPlay, captions: $captions,
                          haptics: $haptics,
                          appearance: Binding(get: { appearance }, set: { appearanceRaw = $0.rawValue }),
-                         keepHistory: $keepHistory, onClearHistory: clearHistory)
+                         keepHistory: $keepHistory, onClearHistory: clearHistory, appIcons: AppIconChoice.ave)
         }
     }
 

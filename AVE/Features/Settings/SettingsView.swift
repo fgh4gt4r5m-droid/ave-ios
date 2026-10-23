@@ -1,6 +1,7 @@
 #if os(iOS)
 import AVECore
 import SwiftUI
+import UIKit
 
 /// Apparence choisie dans les réglages (« Automatique » suit l'iPhone).
 public enum AVEAppearance: String, CaseIterable, Identifiable, Sendable {
@@ -39,17 +40,21 @@ public struct SettingsView: View {
     @Binding var appearance: AVEAppearance
     @Binding var keepHistory: Bool
     let onClearHistory: () -> Void
+    /// Icônes de l'app au choix (vide : pas de section, par exemple dans une app hôte qui intègre AVEKit).
+    let appIcons: [AppIconChoice]
 
     @State private var confirmDelete = false
     @State private var confirmClear = false
     @State private var showLanguages = false
     @State private var errorMessage: String?
+    @State private var currentIcon: String?
+    @State private var iconError: String?
     @Environment(\.dismiss) private var dismiss
 
     public init(session: AuthSession, coordinator: SessionCoordinator?, accountKind: AccountKind?,
                 firstName: Binding<String>, language: Binding<AVELanguageSelection>, autoPlay: Binding<Bool>,
                 captions: Binding<Bool>, haptics: Binding<Bool>, appearance: Binding<AVEAppearance>,
-                keepHistory: Binding<Bool>, onClearHistory: @escaping () -> Void) {
+                keepHistory: Binding<Bool>, onClearHistory: @escaping () -> Void, appIcons: [AppIconChoice] = []) {
         self.session = session
         self.coordinator = coordinator
         self.accountKind = accountKind
@@ -61,6 +66,7 @@ public struct SettingsView: View {
         self._appearance = appearance
         self._keepHistory = keepHistory
         self.onClearHistory = onClearHistory
+        self.appIcons = appIcons
     }
 
     public var body: some View {
@@ -97,6 +103,8 @@ public struct SettingsView: View {
                         ForEach(AVEAppearance.allCases) { Text($0.label).tag($0) }
                     }
                 }
+
+                if !appIcons.isEmpty { appIconSection }
 
                 Section {
                     Toggle("Garder l'historique sur cet iPhone", isOn: $keepHistory)
@@ -155,6 +163,67 @@ public struct SettingsView: View {
                     }
                 }
                 Button("Annuler", role: .cancel) {}
+            }
+        }
+    }
+
+    // MARK: Icône de l'app
+
+    /// Grille d'aperçus, comme le choix d'icône des apps d'Apple : on touche, l'icône change sur l'écran d'accueil
+    /// (iOS affiche lui-même une confirmation).
+    private var appIconSection: some View {
+        Section {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 16) {
+                ForEach(appIcons) { choice in
+                    let selected = choice.alternateName == currentIcon
+                    Button { choose(choice) } label: {
+                        VStack(spacing: 6) {
+                            Image(choice.previewImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 64, height: 64)
+                                .clipShape(.rect(cornerRadius: 14.4))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 14.4)
+                                        .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.25),
+                                                      lineWidth: selected ? 3 : 0.5)
+                                }
+                            Text(choice.title)
+                                .font(.caption2)
+                                .foregroundStyle(selected ? .primary : .secondary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Icône \(choice.title)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .padding(.vertical, 6)
+        } header: {
+            Text("Icône de l'app")
+        } footer: {
+            if let iconError {
+                Text(iconError).foregroundStyle(.orange)
+            } else {
+                Text("En mode sombre, l'icône passe sur fond bleu nuit ; en mode teinté, iOS la colore.")
+            }
+        }
+        .onAppear { currentIcon = UIApplication.shared.alternateIconName }
+    }
+
+    private func choose(_ choice: AppIconChoice) {
+        guard choice.alternateName != currentIcon, UIApplication.shared.supportsAlternateIcons else { return }
+        iconError = nil
+        Task {
+            do {
+                try await UIApplication.shared.setAlternateIconName(choice.alternateName)
+                currentIcon = choice.alternateName
+            } catch {
+                iconError = "L'icône n'a pas pu être changée. Réessayez."
             }
         }
     }

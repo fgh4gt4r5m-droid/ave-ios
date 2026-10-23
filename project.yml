@@ -40,6 +40,9 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Config/AVE.entitlements
         TARGETED_DEVICE_FAMILY: "1"          # iPhone seulement
+        # Icônes au choix (Réglages › Icône de l'app), décision du propriétaire du 2026-10-23 ; tri final plus tard.
+        # Mêmes noms que AppIconChoice.ave (un test le vérifie). Le compilateur d'images les déclare dans l'Info.plist.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Ruban3D-Ivoire AppIcon-Ruban3D-Clair AppIcon-Ruban3D-Nuit AppIcon-Barres3D-Ivoire AppIcon-Barres3D-Clair AppIcon-Barres3D-Nuit"
       configs:
         Debug:
           INFOPLIST_FILE: Config/AVE-Info-Debug.plist   # + exception ATS réseau local

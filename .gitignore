@@ -9,3 +9,5 @@ build/
 test.log
 xcuserdata/
 Config/AVELiveActivity-Info.plist
+# Cache local d'un outil de design (jamais dans le dépôt)
+.impeccable/

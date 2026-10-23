@@ -1,0 +1,38 @@
+{
+  "images": [
+    {
+      "filename": "Ruban3D-Nuit-light.png",
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024"
+    },
+    {
+      "filename": "Ruban3D-Nuit-dark.png",
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "filename": "Ruban3D-Nuit-tinted.png",
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024",
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "tinted"
+        }
+      ]
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

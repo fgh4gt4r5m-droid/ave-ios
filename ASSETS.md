@@ -26,3 +26,12 @@ violet **jamais en texte** (3,6:1) ; ambre pour mises en avant et avertissements
 
 ## Marque
 Avant tout lancement public : version redessinée par un designer, recherche d'antériorité sur le nom et le logo.
+
+## Icônes au choix (2026-10-23)
+Décision du propriétaire : toutes les compositions 3D sont gardées comme icônes au choix (Réglages › Icône de l'app),
+le tri final viendra plus tard. Six jeux `AppIcon-Ruban3D-{Ivoire,Clair,Nuit}` et `AppIcon-Barres3D-{Ivoire,Clair,Nuit}`,
+chacun en clair, sombre (bleu nuit) et teinté, 1024 px RVB sans alpha, déclarés dans `project.yml`
+(`ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`) et dans `AppIconChoice.ave` (un test vérifie qu'ils concordent).
+Aperçus du réglage : `IconPreview-*` (180 px). Composition : symbole 3D détaché du fond noir, fond en dégradé, ombre
+portée large + ombre de contact (script et couches dans « DOSSIER AVE/icones/couches » sur le bureau du propriétaire).
+Version « à plat » : la version en couches Liquid Glass se fait avec Icon Composer (Mac), pas encore faite.
