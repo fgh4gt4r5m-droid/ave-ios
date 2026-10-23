@@ -101,7 +101,10 @@ private struct MicConverter {
               let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: AVAudioFrameCount(samples.count)),
               let channel = input.floatChannelData else { return [] }
         input.frameLength = AVAudioFrameCount(samples.count)
-        samples.withUnsafeBufferPointer { channel[0].update(from: $0.baseAddress ?? channel[0], count: samples.count) }
+        // `baseAddress` n'est nul que pour un tableau vide, déjà écarté par le `guard` ci-dessus.
+        samples.withUnsafeBufferPointer { source in
+            if let base = source.baseAddress { channel[0].update(from: base, count: source.count) }
+        }
 
         let capacity = AVAudioFrameCount(Double(samples.count) * target.sampleRate / sampleRate) + 32
         guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return [] }
