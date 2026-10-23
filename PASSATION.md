@@ -16,17 +16,18 @@ Rédigée le 2026-10-22 par la session cloud « African Voice Engine iOS app ».
 
 ## 3. État réel (honnêteté)
 - **Service de comptes : exécuté et testé.** 77 tests Python verts ; essai de bout en bout 12/12 contre le moteur `main` (voir §7). Non éprouvés : Sign in with Apple (jamais appelé contre `appleid.apple.com`), App Attest (chaîne de certificats synthétique, pas de vraie attestation), envoi réel des SMS/WhatsApp (seul un adaptateur webhook générique).
-- **App iOS : ~7 000 lignes de Swift, 166 `@Test` (Swift Testing), JAMAIS compilées avant Codemagic.** Premier build Codemagic (`swift test`, étape 3) : une erreur de compilation (clé `version` en double dans `ClientMessage.Keys`), corrigée dans `93b5cef`. Le compilateur s'arrête au premier module en échec : **`AVEKit`, les vues, la Live Activity et les tests n'ont encore jamais été compilés.** Attendre d'autres erreurs.
+- **App iOS : ~7 000 lignes de Swift, 167 `@Test` (Swift Testing). Le workflow Codemagic `ave-ci` est VERT depuis le 2026-10-23 (commit `51eed97`, Xcode 26.6, SDK iOS 26.5)** : `swift test` sur macOS, XcodeGen, compilation iOS simulateur sans signature (app, AVEKit, extension Live Activity) et tests sur simulateur. Corrections nécessaires, toutes dans l'historique git : clé `version` en double, `await` à droite de `&&` dans un `#expect`, bulle non marquée interrompue sur `tts_end {interrupted:true}`, `import AVECore` manquants (les imports valent par fichier), bloc d'entrée d'`AVAudioConverter`, `Activity` non `Sendable`, repli de pointeur incompatible, et l'extension Live Activity qui ne lie plus le package (elle compile directement trois fichiers sans dépendance, voir `LIVEACTIVITY.md`). **Rien n'a encore tourné sur un iPhone réel** : annulation d'écho, Bluetooth, appel entrant, Sign in with Apple, App Attest et Live Activity restent à éprouver sur appareil (signature et TestFlight non configurés).
 - Les formes des messages ont été vérifiées contre le VRAI moteur (script Python rejouant hello/text/set_language) : trouvé et corrigé `ready.grace_s` flottant (`30.0`).
 
-## 4. Prochaine étape immédiate : la boucle Codemagic
-Le propriétaire **n'a pas de Mac** (Codemagic uniquement ; sans doute Windows). Le Swift ne peut donc être compilé que sur Codemagic.
+## 4. La boucle Codemagic (en place, verte)
+Le propriétaire **n'a pas de Mac** (Codemagic uniquement, Windows). Le Swift ne se compile que sur Codemagic.
 1. Codemagic → application `ave-ios` → branche `main` → workflow **`ave-ci`** (nom affiché « AVE - compilation et tests »). Jamais `ave-testflight` (non configuré).
-2. Étapes : `swift test` (macOS, logique pure) → XcodeGen → compilation iOS simulateur sans signature (compile tout le code iOS) → tests simulateur.
-3. Récupérer le journal de l'étape en échec (ou `build.log`/`test.log` des artefacts), corriger, pousser, relancer. **Plusieurs allers-retours à prévoir.**
+2. Étapes : `swift test` (macOS, logique pure) → XcodeGen → compilation iOS simulateur sans signature (arm64 ET x86_64 : une erreur peut n'apparaître que sur l'une) → tests simulateur.
+3. En cas d'échec : récupérer le journal de l'étape (ou `build.log`/`test.log` des artefacts), corriger, pousser, relancer.
 4. Amélioration possible : appeler l'API REST de Codemagic avec un jeton du propriétaire pour lancer le build et lire les journaux sans copier-coller (jeton à garder hors dépôt).
 
-Zones à risque connues (jamais compilées) : concurrence stricte Swift 6 (`@Observable`/`@MainActor` dans `SessionCoordinator`), `AVAudioEngine`/voice processing, `ActivityKit`, `SignInWithAppleButton`, `Package.swift` (deux cibles qui partagent le dossier `AVE` avec des listes `sources` disjointes), `project.yml` (jamais passé dans XcodeGen ; en particulier `test: targets: - package: AVEPackage/AVETests`), macros Swift Testing.
+Prochaines étapes probables (à décider par le propriétaire) : essai sur iPhone réel (nécessite la signature et `ave-testflight`), icône 1024 px, vraies adresses de production.
+Avertissement restant : `.allowBluetooth` déprécié dans le SDK iOS 26 (renommé `.allowBluetoothHFP`) ; gardé tant que des SDK plus anciens doivent compiler.
 
 ## 5. Décisions produit déjà prises (ne pas les rouvrir sans le propriétaire)
 - Trois dépôts séparés ; le contrat commun reste dans `african-voice-engine`.
