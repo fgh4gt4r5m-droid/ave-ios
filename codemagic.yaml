@@ -49,42 +49,41 @@ workflows:
     name: "AVE - TestFlight (manuel)"
     instance_type: mac_mini_m2
     max_build_duration: 60
-    # À CONFIGURER avant usage : intégration App Store Connect nommée ci-dessous, identifiants d'app enregistrés chez Apple
-    # (fr.ave.app et fr.ave.app.liveactivity), capacités « Sign in with Apple » et « App Attest » activées sur l'identifiant,
-    # icône 1024 px dans Assets.xcassets. Les adresses réelles se passent en variables d'environnement (groupe « ave »).
+    # Prérequis (voir APPSTORE.md, § TestFlight) : clé API App Store Connect nommée AVE_ASC_KEY dans Codemagic, certificat
+    # Apple Distribution et profils App Store des DEUX identifiants (app et extension) récupérés dans Codemagic, fiche de l'app
+    # créée dans App Store Connect, groupe de variables « ave » (AVE_ENDPOINT, AVE_ACCOUNTS_URL).
     integrations:
       app_store_connect: AVE_ASC_KEY
     environment:
       groups:
-        - ave                       # AVE_ENDPOINT, AVE_ACCOUNTS_URL (adresses https/wss de production)
+        - ave                       # AVE_ENDPOINT (wss://…/v1/stream), AVE_ACCOUNTS_URL (https://…) : adresses réelles
       xcode: 27.1
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: fr.ave.app
-      vars:
-        BUNDLE_ID: fr.ave.app
+        bundle_identifier: fr.ave.app   # Codemagic prend aussi les profils fr.ave.app.* (l'extension Live Activity)
     scripts:
+      - name: "Vérifier les adresses (pas de placeholder .example, wss/https seulement)"
+        script: |
+          case "$AVE_ENDPOINT" in wss://*) ;; *) echo "AVE_ENDPOINT doit commencer par wss:// (groupe « ave »)"; exit 1 ;; esac
+          case "$AVE_ACCOUNTS_URL" in https://*) ;; *) echo "AVE_ACCOUNTS_URL doit commencer par https:// (groupe « ave »)"; exit 1 ;; esac
+          case "$AVE_ENDPOINT$AVE_ACCOUNTS_URL" in *.example*) echo "Adresse provisoire .example : renseigner les vraies adresses"; exit 1 ;; esac
       - name: "Installer XcodeGen et générer le projet"
         script: |
           brew install xcodegen
           xcodegen generate
-      - name: "Signature"
-        script: xcode-project use-profiles
-      - name: "Numéro de build"
+      - name: "Signature (testeurs internes seulement : pas de revue Apple)"
         script: |
-          BUILD=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
-          echo "BUILD_NUMBER=$((BUILD + 1))" >> "$CM_ENV"
-      - name: "Archive"
+          xcode-project use-profiles             --export-options-plist "$HOME/export_options.plist"             --custom-export-options='{"testFlightInternalTestingOnly": true}'
+      - name: "Archive et export"
         script: |
-          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release \
-            -archivePath build/AVE.xcarchive \
-            AVE_ENDPOINT="$AVE_ENDPOINT" AVE_ACCOUNTS_URL="$AVE_ACCOUNTS_URL" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive
-          xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa \
-            -exportOptionsPlist "$HOME/export_options.plist"
+          set -o pipefail
+          # BUILD_NUMBER : fourni par Codemagic, croît à chaque build du workflow (Apple refuse deux fois le même numéro).
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_ENDPOINT="$AVE_ENDPOINT" AVE_ACCOUNTS_URL="$AVE_ACCOUNTS_URL"             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive 2>&1 | tee archive.log | tail -n 40
+          xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa             -exportOptionsPlist "$HOME/export_options.plist"
     artifacts:
       - build/ipa/*.ipa
+      - archive.log
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
+        submit_to_testflight: false   # testeurs internes : le build leur est proposé sans revue après traitement par Apple

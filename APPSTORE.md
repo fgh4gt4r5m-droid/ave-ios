@@ -46,14 +46,33 @@ conversation ni commité dans un dépôt.**
   | Audio (voix) et messages | oui si compte | Fonctionnement ; **amélioration du service seulement avec consentement** |
   Pas de pistage publicitaire, pas d'analytique tierce dans l'app aujourd'hui.
 
-## 5. TestFlight (premier essai sur iPhone)
-Ce qui manque encore, côté app et service — **à faire avant le premier envoi** :
-- **Icône 1024 × 1024 px** opaque, symbole seul (voir `ASSETS.md`) : sans elle, Apple refuse le build.
-- **Vraies adresses** du moteur (`wss://…`) et du service de comptes (`https://…`) déployés publiquement, passées à Codemagic par le
-  groupe de variables `ave` (`AVE_ENDPOINT`, `AVE_ACCOUNTS_URL`).
-- `ITSAppUsesNonExemptEncryption = NO` dans l'Info.plist (chiffrement standard HTTPS/WSS seulement) : évite la question à chaque build.
-- Puis Codemagic → workflow **`ave-testflight`** (manuel). Testeurs **internes** (membres de l'équipe, jusqu'à 100) : pas de revue Apple.
-  Testeurs **externes** : revue « Beta App Review » d'Apple.
+## 5. TestFlight pas à pas (testeurs internes, sans revue Apple)
+Le workflow Codemagic **`ave-testflight`** est prêt (signature, numéro de build automatique, envoi). Il exporte un build
+**réservé aux testeurs internes** (`testFlightInternalTestingOnly`) : pas de « Beta App Review », mais seuls les membres de
+votre équipe App Store Connect peuvent l'installer (100 au maximum).
+
+**Avant tout** : les §1 à §4 sont faits (programme payé, les DEUX identifiants créés, clé `AVE_ASC_KEY` dans Codemagic,
+fiche de l'app créée). Si l'identifiant de bundle n'est pas `fr.ave.app`, me le dire d'abord : il est écrit dans
+`project.yml`, `codemagic.yaml` et le Keychain, et le service de comptes doit le connaître (audience Sign in with Apple).
+
+1. **Certificat** — Codemagic → Team settings → **Code signing identities → iOS certificates** → « Generate certificate » :
+   type **Apple Distribution**, clé `AVE_ASC_KEY`. Codemagic le garde ; rien à télécharger.
+2. **Profils** (navigateur) — developer.apple.com → Certificates, Identifiers & Profiles → **Profiles** → « + » →
+   **App Store Connect** (distribution) → App ID `fr.ave.app` → le certificat de l'étape 1 → nom « AVE App Store ».
+   Recommencer pour `fr.ave.app.liveactivity` → nom « AVE Live Activity App Store ».
+3. **Profils dans Codemagic** — Code signing identities → **iOS provisioning profiles** → « Fetch profiles » → cocher les deux.
+4. **Adresses** — Codemagic → app `ave-ios` → Environment variables → groupe **`ave`** :
+   `AVE_ENDPOINT` = `wss://…/v1/stream` (moteur) et `AVE_ACCOUNTS_URL` = `https://…` (service de comptes). Le workflow
+   **refuse** de construire avec une adresse `.example`, `ws://` ou `http://`.
+5. **Testeurs** — App Store Connect → Utilisateurs et accès : inviter chaque testeur (rôle « Développeur » ou
+   « Marketing » suffit). Puis l'app → **TestFlight → Tests internes → « + »** : groupe « Équipe AVE », ajouter les testeurs,
+   activer la **distribution automatique**.
+6. **Lancer** — Codemagic → `ave-ci` doit être vert sur `main`, puis **`ave-testflight`** → « Start new build » → `main`.
+   Compter ~20–30 min de build, puis 10–30 min de traitement chez Apple.
+7. **Installer** — chaque testeur reçoit un e-mail, installe l'app **TestFlight** depuis l'App Store, accepte l'invitation, installe AVE.
+
+**Ce qui fonctionnera, honnêtement** : l'app ne fait rien sans serveurs joignables. Sans moteur ni service de comptes
+déployés (étape 4), on ne dépasse pas l'écran de connexion. L'icône est **provisoire** (`ASSETS.md`).
 
 ## 6. Publication publique : ce qui bloquera la revue Apple aujourd'hui (honnêteté)
 - **Fonctionnalité minimale (règles 2.1 et 4.2)** : le moteur répond par écho avec un son de test ; une app publique dans cet état a de
