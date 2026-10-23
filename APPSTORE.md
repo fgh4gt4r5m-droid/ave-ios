@@ -4,6 +4,16 @@ Rédigé le 2026-10-23. Tout se fait dans un navigateur (ou l'app « Apple Devel
 signature passent par Codemagic. **Aucune clé, aucun certificat, aucun fichier `.p8` ne doit être collé dans une
 conversation ni commité dans un dépôt.**
 
+## Compte existant (WoYo et Driver sont déjà sur l'App Store)
+Le programme Apple Developer, l'équipe et l'intégration Codemagic existent déjà : **pas de nouvelle inscription** (§1 sauté).
+- **AVE se publie dans la MÊME équipe** que WoYo et Driver (même nom de vendeur sur l'App Store).
+- **Clé API** : réutiliser la clé App Store Connect déjà déclarée dans Codemagic pour WoYo/Driver (accès App Manager
+  suffisant) ; `codemagic.yaml` doit porter **son nom exact** à la place de `AVE_ASC_KEY`.
+- **Certificat Apple Distribution** : réutiliser celui que Codemagic a déjà (Apple limite leur nombre par équipe ; en
+  créer un nouveau sans besoin peut bloquer). Il signe aussi AVE : seuls les **profils** sont propres à AVE (§5, étape 2).
+- **Identifiant de bundle** : suivre le préfixe déjà utilisé par WoYo et Driver (même domaine inversé).
+- Ne rien modifier dans les identifiants, profils ou certificats de WoYo/Driver : on ne fait qu'en AJOUTER pour AVE.
+
 ## 0. Décisions à prendre AVANT de commencer (irréversibles ou presque)
 | Décision | Pourquoi c'est important |
 |---|---|
@@ -55,8 +65,9 @@ votre équipe App Store Connect peuvent l'installer (100 au maximum).
 fiche de l'app créée). Si l'identifiant de bundle n'est pas `fr.ave.app`, me le dire d'abord : il est écrit dans
 `project.yml`, `codemagic.yaml` et le Keychain, et le service de comptes doit le connaître (audience Sign in with Apple).
 
-1. **Certificat** — Codemagic → Team settings → **Code signing identities → iOS certificates** → « Generate certificate » :
-   type **Apple Distribution**, clé `AVE_ASC_KEY`. Codemagic le garde ; rien à télécharger.
+1. **Certificat** — Codemagic → Team settings → **Code signing identities → iOS certificates** : le certificat
+   **Apple Distribution** de l'équipe (déjà utilisé pour WoYo/Driver) y est normalement. Seulement s'il n'y est pas :
+   « Generate certificate », type Apple Distribution, avec la clé de l'équipe.
 2. **Profils** (navigateur) — developer.apple.com → Certificates, Identifiers & Profiles → **Profiles** → « + » →
    **App Store Connect** (distribution) → App ID `fr.ave.app` → le certificat de l'étape 1 → nom « AVE App Store ».
    Recommencer pour `fr.ave.app.liveactivity` → nom « AVE Live Activity App Store ».
