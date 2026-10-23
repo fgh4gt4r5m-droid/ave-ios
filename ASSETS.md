@@ -12,9 +12,11 @@ raster de 1254 px, probablement générées par IA : elles ne sont **pas** dans 
 | Glyphe Live Activity | Barres de son seules, **monochrome** (SF Symbol personnalisé ou PDF vectoriel). Provisoire : symboles SF (`waveform`…). |
 
 À déposer dans `AVE/App/Assets.xcassets/AppIcon.appiconset/` en remplaçant `AppIcon-1024.png`.
-**Icône actuelle PROVISOIRE** (2026-10-23) : sept barres de son (bleu, barre centrale ambre) sur le fond `#010A29`, dessinée
-par programme pour débloquer TestFlight (Apple refuse un build sans icône). Ce n'est pas le logo : à remplacer avant toute
-publication.
+**Icône actuelle (2026-10-23)** : générée par le propriétaire à partir des prompts fournis (carte de l'Afrique en volutes,
+barres de son, barre centrale ambre) : `AppIcon-1024.png` (clair, fond bleu nuit), `AppIcon-Dark-1024.png` (sombre, fond
+noir) et `AppIcon-Tinted-1024.png` (teintée, niveaux de gris), 1024 px opaques, vérifiées lisibles à 60 et 29 px.
+`AVELogo` : le même logo DÉTOURÉ (fond transparent, tiré de la version sombre) pour l'écran de lancement et les animations.
+Images générées par IA : recherche d'antériorité sur le logo à faire avant le lancement public ; vectorisation à prévoir.
 
 ## Palette (relevée sur le logo, approximative)
 `AVEPalette` : fond `#010A29`, bleu `#5EA0FD`, ambre `#FEBD3F`, violet `#813EF3`, surface `#101C4D` (dérivée).
