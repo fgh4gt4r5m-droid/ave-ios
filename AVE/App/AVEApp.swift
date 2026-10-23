@@ -232,7 +232,10 @@ struct RootView: View {
         do {
             let env = try AppEnvironment.load()
             let api = try makeAccountsAPI(env)
-            let auth = AuthSession(api: api, store: KeychainTokenStore())
+            let keychain = KeychainTokenStore()
+            // Réinstallation : iOS a gardé l'ancienne session dans le trousseau ; on l'oublie, comme le reste de l'app.
+            FreshInstall.purgeStaleSession(store: keychain)
+            let auth = AuthSession(api: api, store: keychain)
             environment = env
             session = auth
             signIn = SignInViewModel(api: api, session: auth, attester: AppAttestGuestAttester(),

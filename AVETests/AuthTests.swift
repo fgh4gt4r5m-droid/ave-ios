@@ -466,3 +466,27 @@ struct SignInViewModelTests {
         #expect(vm.step == .welcome)
     }
 }
+
+/// Réinstallation : iOS garde le trousseau, l'app doit oublier l'ancienne session (écran de connexion à nouveau).
+@Suite("Nouvelle installation")
+struct FreshInstallTests {
+    @Test("premier lancement : l'ancienne session est effacée, une seule fois")
+    func purgesOnce() throws {
+        let defaults = try #require(UserDefaults(suiteName: "ave-tests-\(UUID().uuidString)"))
+        let store = InMemoryTokenStore(token: "ancienne-session")
+        #expect(FreshInstall.purgeStaleSession(defaults: defaults, store: store))
+        #expect(store.readToken() == nil)
+        // Lancements suivants : la session ouverte depuis est gardée.
+        try store.saveToken("nouvelle-session")
+        #expect(!FreshInstall.purgeStaleSession(defaults: defaults, store: store))
+        #expect(store.readToken() == "nouvelle-session")
+    }
+
+    @Test("premier lancement sans ancienne session : rien à effacer, repère posé")
+    func nothingToPurge() throws {
+        let defaults = try #require(UserDefaults(suiteName: "ave-tests-\(UUID().uuidString)"))
+        let store = InMemoryTokenStore()
+        #expect(!FreshInstall.purgeStaleSession(defaults: defaults, store: store))
+        #expect(defaults.bool(forKey: FreshInstall.markerKey))
+    }
+}
