@@ -12,7 +12,7 @@ public struct KeychainTokenStore: TokenStore {
     private let service: String
     private let account: String
 
-    public init(service: String = "fr.ave.app.auth", account: String = "account-credentials") {
+    public init(service: String = "com.tam.ave.auth", account: String = "account-credentials") {
         self.service = service
         self.account = account
     }

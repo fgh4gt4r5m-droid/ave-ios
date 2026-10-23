@@ -22,7 +22,7 @@ public struct AVELogger: Sendable {
 
     #if canImport(os)
     public static let system: AVELogger = {
-        let logger = Logger(subsystem: "fr.ave.app", category: "network")
+        let logger = Logger(subsystem: "com.tam.ave", category: "network")
         return AVELogger { level, message in
             switch level {
             case .debug: logger.debug("\(message, privacy: .public)")

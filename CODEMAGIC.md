@@ -13,7 +13,7 @@ Le code vit dans le package SwiftPM (`Package.swift`) ; le projet ne fait que l'
 3. **Le premier lancement échouera très probablement** : ce code n'a jamais été compilé. Envoyez-moi le journal (`build.log` / `test.log` sont fournis en artefacts) et je corrige.
 
 ## Ce qui reste à faire pour TestFlight (workflow `ave-testflight`, manuel)
-- Identifiants d'app chez Apple : `fr.ave.app` et `fr.ave.app.liveactivity` (à adapter dans `project.yml` si vous préférez un autre préfixe), avec les capacités **Sign in with Apple** et **App Attest**.
+- Identifiants d'app chez Apple : `com.tam.ave` et `com.tam.ave.liveactivity` (même préfixe que WoYo), avec les capacités **Sign in with Apple** et **App Attest**.
 - Intégration **App Store Connect** dans Codemagic, nommée `TAM_ASC_KEY` (clé existante de l'équipe, partagée avec WoYo et Driver), et signature automatique iOS.
 - Groupe de variables `ave` avec `AVE_ENDPOINT` (`wss://…/v1/stream`) et `AVE_ACCOUNTS_URL` (`https://…`) : les valeurs de `Config/Release.xcconfig` sont des **placeholders** (`.example`).
 - Icône 1024 × 1024 px dans `AVE/App/Assets.xcassets/AppIcon.appiconset` (voir `ASSETS.md`).

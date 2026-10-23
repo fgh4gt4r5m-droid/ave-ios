@@ -41,7 +41,7 @@ Avertissement restant : `.allowBluetooth` déprécié dans le SDK iOS 26 (renomm
 
 ## 6. Questions ouvertes (à trancher par le propriétaire)
 - Fournisseur d'envoi des codes (SMS/WhatsApp) ; coût et fiabilité dans la région.
-- Vraies adresses de production (`api…`, `accounts…`) : `Config/Release.xcconfig` contient des placeholders `.example`. Identifiants d'app : `fr.ave.app` et `fr.ave.app.liveactivity` sont une **hypothèse**.
+- Vraies adresses de production (`api…`, `accounts…`) : `Config/Release.xcconfig` contient des placeholders `.example`. Identifiants d'app **décidés** : `com.tam.ave` et `com.tam.ave.liveactivity` (préfixe de WoYo).
 - Notice d'apprentissage : relecture par un juriste, rôles de responsable de traitement, durée de conservation, localisation ; traduction par des natifs.
 - App hôte dont le backend ne passe pas de `sub` : consentement non persistant et effacement limité (limite côté moteur, l'app ne peut pas la détecter).
 - Vrai TTS/LLM côté moteur : hors de ce périmètre.

@@ -2,7 +2,7 @@
 # (non committé). Codemagic le génère à chaque build (voir codemagic.yaml). Le code vit dans le package SwiftPM (Package.swift).
 name: AVE
 options:
-  bundleIdPrefix: fr.ave
+  bundleIdPrefix: com.tam
   deploymentTarget:
     iOS: "27.0"                   # décision du propriétaire (2026-10-23) : iOS 27 minimum, compilé avec Xcode 27.1
   createIntermediateGroups: true
@@ -36,7 +36,7 @@ targets:
         embed: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: fr.ave.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.tam.ave      # même préfixe que WoYo (com.tam.woyo), décidé le 2026-10-23
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Config/AVE.entitlements
         TARGETED_DEVICE_FAMILY: "1"          # iPhone seulement
@@ -65,7 +65,7 @@ targets:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: fr.ave.app.liveactivity
+        PRODUCT_BUNDLE_IDENTIFIER: com.tam.ave.liveactivity
         TARGETED_DEVICE_FAMILY: "1"
 schemes:
   AVE:

@@ -14,11 +14,16 @@ Le programme Apple Developer, l'équipe et l'intégration Codemagic existent dé
 - **Identifiant de bundle** : suivre le préfixe déjà utilisé par WoYo et Driver (même domaine inversé).
 - Ne rien modifier dans les identifiants, profils ou certificats de WoYo/Driver : on ne fait qu'en AJOUTER pour AVE.
 
+## Service de comptes : réglages liés à l'identifiant (au déploiement de `ave-accounts`)
+- `ACCOUNTS_APPLE_AUDIENCE=com.tam.ave` : sans lui, Sign in with Apple est désactivé (503).
+- `ACCOUNTS_APPATTEST_APP_ID=<TEAM_ID>.com.tam.ave` : `<TEAM_ID>` = identifiant d'équipe à 10 caractères (developer.apple.com →
+  Membership details), le même que pour WoYo. Sans lui, le mode invité est désactivé (403).
+
 ## 0. Décisions à prendre AVANT de commencer (irréversibles ou presque)
 | Décision | Pourquoi c'est important |
 |---|---|
 | **Compte Individuel ou Organisation** | Le nom affiché comme vendeur sur l'App Store est le vôtre (individuel) ou celui de la société (organisation). Organisation = entité juridique + **numéro D-U-N-S** (gratuit, quelques jours à obtenir). Changer plus tard est long. |
-| **Identifiant de bundle** | Le code utilise `fr.ave.app` (app) et `fr.ave.app.liveactivity` (extension) : c'est une **hypothèse**. Une fois l'app créée dans App Store Connect, il ne change plus. Convention : un domaine que vous possédez, à l'envers. Me dire la valeur choisie : je l'aligne dans `project.yml`, `codemagic.yaml` et le Keychain. |
+| **Identifiant de bundle** | **Décidé (2026-10-23) : `com.tam.ave` (app) et `com.tam.ave.liveactivity` (extension)**, même préfixe que WoYo (`com.tam.woyo`). Définitif dès le premier build envoyé. Déjà aligné dans `project.yml`, `codemagic.yaml` et le Keychain. |
 | **Nom de l'app** | 30 caractères maximum, unique sur l'App Store. Ex. « AVE – African Voice Engine » (26). |
 
 ## 1. Programme Apple Developer (99 USD/an)
@@ -27,7 +32,7 @@ Le programme Apple Developer, l'équipe et l'intégration Codemagic existent dé
 3. Choisir Individuel ou Organisation (voir §0), payer, attendre la validation (de quelques heures à quelques jours).
 
 ## 2. Identifiants (developer.apple.com → Certificates, Identifiers & Profiles → Identifiers)
-1. **App ID** « explicite » : bundle choisi au §0 (ex. `fr.ave.app`). Cocher les capacités :
+1. **App ID** « explicite » : `com.tam.ave`. Cocher les capacités :
    - **Sign in with Apple** (« Enable as a primary App ID ») ;
    - **App Attest**.
 2. **App ID de l'extension** : `<bundle>.liveactivity`, aucune capacité.
@@ -62,15 +67,15 @@ Le workflow Codemagic **`ave-testflight`** est prêt (signature, numéro de buil
 votre équipe App Store Connect peuvent l'installer (100 au maximum).
 
 **Avant tout** : les §1 à §4 sont faits (programme payé, les DEUX identifiants créés, clé `TAM_ASC_KEY` dans Codemagic,
-fiche de l'app créée). Si l'identifiant de bundle n'est pas `fr.ave.app`, me le dire d'abord : il est écrit dans
+fiche de l'app créée). Identifiant de bundle : `com.tam.ave`, écrit dans
 `project.yml`, `codemagic.yaml` et le Keychain, et le service de comptes doit le connaître (audience Sign in with Apple).
 
 1. **Certificat** — Codemagic → Team settings → **Code signing identities → iOS certificates** : le certificat
    **Apple Distribution** de l'équipe (déjà utilisé pour WoYo/Driver) y est normalement. Seulement s'il n'y est pas :
    « Generate certificate », type Apple Distribution, avec la clé de l'équipe.
 2. **Profils** (navigateur) — developer.apple.com → Certificates, Identifiers & Profiles → **Profiles** → « + » →
-   **App Store Connect** (distribution) → App ID `fr.ave.app` → le certificat de l'étape 1 → nom « AVE App Store ».
-   Recommencer pour `fr.ave.app.liveactivity` → nom « AVE Live Activity App Store ».
+   **App Store Connect** (distribution) → App ID `com.tam.ave` → le certificat de l'étape 1 → nom « AVE App Store ».
+   Recommencer pour `com.tam.ave.liveactivity` → nom « AVE Live Activity App Store ».
 3. **Profils dans Codemagic** — Code signing identities → **iOS provisioning profiles** → « Fetch profiles » → cocher les deux.
 4. **Adresses** — Codemagic → app `ave-ios` → Environment variables → groupe **`ave`** :
    `AVE_ENDPOINT` = `wss://…/v1/stream` (moteur) et `AVE_ACCOUNTS_URL` = `https://…` (service de comptes). Le workflow

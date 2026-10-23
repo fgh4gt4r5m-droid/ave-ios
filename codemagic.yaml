@@ -60,7 +60,7 @@ workflows:
       xcode: 27.1
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: fr.ave.app   # Codemagic prend aussi les profils fr.ave.app.* (l'extension Live Activity)
+        bundle_identifier: com.tam.ave   # Codemagic prend aussi les profils com.tam.ave.* (l'extension Live Activity)
     scripts:
       - name: "Vérifier les adresses (pas de placeholder .example, wss/https seulement)"
         script: |
