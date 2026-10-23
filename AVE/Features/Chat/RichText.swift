@@ -40,10 +40,41 @@ struct RichText: View {
                             .padding(12)
                     }
                     .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
+                case .table(let header, let rows):
+                    table(header: header, rows: rows)
                 }
             }
         }
         .textSelection(.enabled)
+    }
+
+    /// Tableau simple : un tableau plus large que l'écran défile DANS la réponse, jamais l'écran (maquette 3).
+    private func table(header: [String], rows: [[String]]) -> some View {
+        ScrollView(.horizontal) {
+            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                // Pas de modificateur sur un `GridRow` : la grille ne le reconnaîtrait plus comme une ligne.
+                GridRow {
+                    ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                        inline(cell).font(.subheadline.weight(.semibold)).padding(.horizontal, 10).padding(.vertical, 8)
+                            .frame(maxWidth: 220, alignment: .leading)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                }
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    Divider()
+                    GridRow {
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                            inline(cell).font(.subheadline).padding(.horizontal, 10).padding(.vertical, 8)
+                                .frame(maxWidth: 220, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(.separator), lineWidth: 1))
+            .clipShape(.rect(cornerRadius: 12))
+            .padding(1)
+        }
+        .scrollIndicators(.hidden)
     }
 
     private func inline(_ s: String) -> Text {

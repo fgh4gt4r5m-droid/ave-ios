@@ -69,6 +69,10 @@ public struct BargeInStateMachine: Sendable, Equatable {
             phase = .listening
         case (.thinking, .turnFailed):
             phase = .idle
+        // « Arrêter » pendant que le moteur prépare sa réponse (aucun audio encore) : rien à purger, on le prévient.
+        case (.thinking, .manualInterrupt):
+            phase = .idle
+            return [.sendInterrupt]
         // Fin de tour sans audio (réponse texte) ou réponse vide. Un `turn_end(interrupted:true)` en
         // réflexion est le reliquat du tour que l'utilisateur vient de couper : ignoré.
         case (.thinking, .turnEnded(let interrupted)):

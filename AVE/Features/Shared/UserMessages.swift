@@ -66,6 +66,18 @@ public enum UserMessages {
     public static let offlineQueued = "Hors connexion. Vos messages partiront au retour du réseau."
     /// État réel du moteur au 2026-10-23 (dialogue en écho, voix de test). Affiché seulement si l'app l'active.
     public static let demoEngine = "Version d'essai : l'assistant répète ce que vous dites et sa voix est un son de test."
+    /// Mention d'essai d'après `ready.engine` (D6, maquette « Mention selon l'état du moteur » validée le 2026-10-23).
+    /// Sans `engine` (moteur ancien, démo hors ligne, pas encore connecté) : `fallback`, le réglage du build.
+    public static func demoNotice(engine: EngineStatus?, fallback: String?) -> String? {
+        guard let engine else { return fallback }
+        switch (engine.dialogue == .real, engine.voice == .real) {
+        case (false, false): return demoEngine
+        case (true, false): return "Version d'essai : la voix de l'assistant est un son de test."
+        case (false, true): return "Version d'essai : l'assistant répète ce que vous dites."
+        case (true, true): return nil
+        }
+    }
+
     /// Build de démo sans moteur en ligne : les réponses viennent de l'iPhone (`DemoEngineTransport`).
     public static let demoOffline = "Démo hors ligne : aucun moteur connecté. Les réponses viennent de l'iPhone, avec un son de test."
 

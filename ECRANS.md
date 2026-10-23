@@ -119,3 +119,20 @@ Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Si
 enregistrement dans Photos et Fichiers, VoiceOver sur les cartes, mise en page des raccourcis en grande taille de texte.
 Côté moteur : les images restent simulées tant que la machine GPU ne tourne pas, et le tenant `ave-grand-public` doit avoir
 les `features` `images` et `documents`, sinon chaque demande répond « Cette fonction n'est pas encore disponible. ».
+
+## Assistant du quotidien (maquettes validées le 2026-10-23, les cinq écrans)
+Validées une par une par le propriétaire sur la page « Validation des maquettes AVE ».
+- **Accueil** : six exemples du quotidien (organiser, écrire, comprendre, chercher, cuisiner, parler) ; la barre dit
+  « Demandez ce que vous voulez » tant que la conversation est vide.
+- **Arrêter** : pendant que l'assistant prépare, écrit ou dit sa réponse, le bouton rond devient un carré. Il envoie
+  `interrupt`, marque la bulle « Interrompu » (ce qui est écrit reste) et ignore le reste du tour jusqu'à son `turn_end`
+  (repli : le `transcript` du tour suivant, tant que la PR #28 du moteur n'est pas déployée). Comportement du moteur
+  confirmé par sa session le 2026-10-23 (PR #28).
+- **Tableaux** : `| a | b |` suivi de `|---|---|` ; un tableau plus large que l'écran défile dans la réponse.
+- **Mention d'essai** : suit `ready.engine` (D6) à chaque session : écho et son de test → mention complète ; dialogue
+  réel et voix de test → « la voix de l'assistant est un son de test » ; tout réel → aucune. Sans `engine` (moteur ancien,
+  démo hors ligne) : le réglage du build.
+- **Pas encore codé, en attente du moteur** : affichage au fil de l'eau par fragments et assemblage exact (D7), sources
+  (D8, après le choix du moteur de recherche), mémoire d'une conversation rouverte (D9), titre généré (D10). Tant que D7
+  n'est pas en ligne, l'app colle encore les phrases avec une espace : une liste reçue en morceaux peut s'afficher sur une
+  ligne.

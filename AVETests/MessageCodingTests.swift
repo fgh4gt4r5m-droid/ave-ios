@@ -83,7 +83,7 @@ struct MessageCodingTests {
         let f = try ServerFrame.decode(#"{"type":"ready","session_id":"s","resumed":true,"last_mic_seq":9,"seq":4,"protocol":1}"#)
         #expect(f.seq == nil)
         #expect(f.event == .ready(.init(sessionID: "s", resumed: true, lastMicSeq: 9, seq: 4, protocolVersion: 1,
-                                        graceSeconds: nil, languages: nil, learning: nil)))
+                                        graceSeconds: nil, languages: nil, learning: nil, engine: nil)))
     }
 
     @Test("ready actuel : grace_s et langues avec disponibilité réelle")

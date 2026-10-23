@@ -50,6 +50,29 @@ public enum ServerEvent: Sendable, Equatable {
         public let languages: [LanguageInfo]?
         /// Apprentissage avec consentement. `nil` sur un serveur ancien : rien à demander.
         public let learning: LearningStatus?
+        /// Ce qui est réel dans CETTE session (D6, moteur `main` @ `a328fae`). `nil` : moteur plus ancien, l'app garde la
+        /// mention complète.
+        public let engine: EngineStatus?
+    }
+}
+
+/// `ready.engine` (D6). Valeurs fermées ; une valeur inconnue est lue `nil` et traitée comme « pas réel » (avertir à tort
+/// plutôt que laisser croire à un vrai assistant). `real` décrit la configuration du moteur, ce n'est pas une sonde.
+public struct EngineStatus: Sendable, Equatable {
+    public enum Dialogue: String, Sendable, Equatable { case real, echo }
+    public enum Voice: String, Sendable, Equatable { case real, testTone = "test_tone" }
+    public enum Media: String, Sendable, Equatable { case real, simulated, off }
+
+    public let dialogue: Dialogue?
+    public let voice: Voice?
+    public let images: Media?
+    public let documents: Media?
+
+    public init(dialogue: Dialogue?, voice: Voice?, images: Media?, documents: Media?) {
+        self.dialogue = dialogue
+        self.voice = voice
+        self.images = images
+        self.documents = documents
     }
 }
 
@@ -83,10 +106,12 @@ public struct ServerFrame: Sendable, Equatable {
                 let session_id: String; let resumed: Bool; let last_mic_seq: UInt32
                 let seq: UInt32; let protocolVersion: Int
                 let graceSeconds: Double?; let languages: [LanguageInfo]?; let learning: LearningStatus?
+                let engine: EngineStatus?
                 enum CodingKeys: String, CodingKey {
                     case session_id, resumed, last_mic_seq, seq, protocolVersion = "protocol"
-                    case graceSeconds = "grace_s", languages, learning
+                    case graceSeconds = "grace_s", languages, learning, engine
                 }
+                struct RawEngine: Decodable { let dialogue: String?; let voice: String?; let images: String?; let documents: String? }
 
                 // Les champs ajoutés au fil des versions (grace_s est un FLOTTANT : 30.0, languages) ne
                 // doivent JAMAIS empêcher la lecture de `ready` : sans lui, la session n'est jamais prête.
@@ -100,12 +125,21 @@ public struct ServerFrame: Sendable, Equatable {
                     graceSeconds = try? c.decodeIfPresent(Double.self, forKey: .graceSeconds)
                     languages = try? c.decodeIfPresent([LanguageInfo].self, forKey: .languages)
                     learning = try? c.decodeIfPresent(LearningStatus.self, forKey: .learning)
+                    // `try?` aplatit l'optionnel de `decodeIfPresent` : `RawEngine?`, lu `nil` si absent ou mal formé.
+                    let raw: RawEngine? = try? c.decodeIfPresent(RawEngine.self, forKey: .engine)
+                    engine = raw.map {
+                        EngineStatus(dialogue: $0.dialogue.flatMap(EngineStatus.Dialogue.init(rawValue:)),
+                                     voice: $0.voice.flatMap(EngineStatus.Voice.init(rawValue:)),
+                                     images: $0.images.flatMap(EngineStatus.Media.init(rawValue:)),
+                                     documents: $0.documents.flatMap(EngineStatus.Media.init(rawValue:)))
+                    }
                 }
             }
             let b = try body(B.self)
             event = .ready(.init(sessionID: b.session_id, resumed: b.resumed, lastMicSeq: b.last_mic_seq,
                                  seq: b.seq, protocolVersion: b.protocolVersion,
-                                 graceSeconds: b.graceSeconds, languages: b.languages, learning: b.learning))
+                                 graceSeconds: b.graceSeconds, languages: b.languages, learning: b.learning,
+                                 engine: b.engine))
         case "replayed":
             struct B: Decodable { let count: Int; let gap: Bool }
             let b = try body(B.self)

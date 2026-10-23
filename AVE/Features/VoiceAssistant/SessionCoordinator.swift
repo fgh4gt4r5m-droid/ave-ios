@@ -81,7 +81,10 @@ public final class SessionCoordinator {
 
     public var orbState: OrbState { OrbState(phase: phase, connection: connection) }
     public var supportsTextInput: Bool { configuration.supportsTextInput }
-    public var demoNotice: String? { configuration.demoNotice }
+    /// Mention d'essai : suit ce que le moteur annonce à chaque `ready` (D6) ; le réglage du build sert de repli.
+    public var demoNotice: String? { UserMessages.demoNotice(engine: engine, fallback: configuration.demoNotice) }
+    /// Ce qui est réel dans la session en cours (`ready.engine`), `nil` avant le premier `ready` ou avec un moteur ancien.
+    public private(set) var engine: EngineStatus?
 
     /// Appelé APRÈS accord explicite de l'utilisateur (ou si le serveur dit `confirm: false`).
     @ObservationIgnored public var onAction: (@MainActor (ActionCard) -> Void)?
@@ -112,6 +115,9 @@ public final class SessionCoordinator {
     @ObservationIgnored private var replayCache: [(id: Int, chunks: [Data], bytes: Int)] = []
     /// Message dont la lecture à voix haute a été demandée au moteur (`speak`), jusqu'à son `turn_end`.
     @ObservationIgnored private var speakingFor: Int?
+    /// « Arrêter » touché : ce qui arrive encore de ce tour (phrases, voix, actions) est ignoré jusqu'à son `turn_end`
+    /// ou jusqu'au `transcript` du tour suivant, quel que soit le moment où le moteur prend l'`interrupt` en compte.
+    @ObservationIgnored private var discardingTurn = false
 
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
                 configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil,
@@ -224,6 +230,27 @@ public final class SessionCoordinator {
             pendingTexts.removeFirst()
             await perform(machine.handle(.userSentText))
         }
+    }
+
+    /// Vrai pendant que l'assistant prépare, écrit ou dit sa réponse : la barre de saisie montre « Arrêter ».
+    public var isResponding: Bool {
+        if phase == .thinking || phase == .speaking { return true }
+        guard let last = transcript.messages.last else { return false }
+        return last.role == .assistant && last.status == .streaming
+    }
+
+    /// « Arrêter » (maquette validée le 2026-10-23) : coupe la réponse et la voix ; ce qui est déjà écrit reste, marqué
+    /// « Interrompu ».
+    public func stopResponse() async {
+        guard isResponding else { return }
+        if phase == .thinking || phase == .speaking {
+            await perform(machine.handle(.manualInterrupt))
+        } else {
+            await client.interrupt()  // réponse écrite encore en cours, sans audio
+        }
+        discardingTurn = true
+        transcript.apply(.interrupted)
+        syncPhase()
     }
 
     /// Coupe la voix de l'assistant (bouton, orbe). Sans effet s'il ne parle pas.
@@ -473,6 +500,7 @@ public final class SessionCoordinator {
         case .ready(let ready):
             languageOptions = LanguageCatalog.options(from: ready.languages)
             learning = ready.learning
+            engine = ready.engine  // recalculé à chaque `ready`, reprise comprise
             learningPrompt = nil  // une nouvelle session recalcule la situation
         case .audio(let data):
             handleAudio(data)
@@ -485,6 +513,16 @@ public final class SessionCoordinator {
     }
 
     private func handle(server event: ServerEvent) async {
+        if discardingTurn {
+            switch event {
+            case .replyText, .ttsStart, .ttsEnd, .action:
+                return  // reliquat du tour arrêté
+            case .turnEnd, .turnError, .transcript:
+                discardingTurn = false
+            default:
+                break
+            }
+        }
         switch event {
         case .ttsStart:
             utteranceChunks = []

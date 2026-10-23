@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 /// Écran principal, aux standards des assistants d'iOS (ChatGPT, Claude, Gemini ; proposition 2 validée le 2026-10-23) :
 /// - barre du haut système : historique à gauche, titre (conversation ou « AVE ») + langue au centre, nouvelle
 ///   conversation à droite ;
-/// - accueil : salutation et quatre suggestions qui remplissent la barre d'un toucher ;
+/// - accueil : salutation et six exemples de questions du quotidien qui remplissent la barre d'un toucher (maquette
+///   validée le 2026-10-23) ;
 /// - réponses mises en forme, actions (copier, lire, partager, réessayer, avis), appui long = menu natif ;
 /// - messages écrits hors connexion affichés « en attente », envoyés au retour du réseau ;
 /// - UNE barre de saisie Liquid Glass ; le mode vocal s'ouvre en plein écran sur la MÊME session ;
@@ -228,7 +229,8 @@ public struct ChatView: View {
     /// au-dessus de la barre (comme ChatGPT et Gemini).
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 20) {
-            AVELiveMark(phase: .idle).frame(width: 96, height: 96)
+            // 72 pt (et non 96) : six exemples doivent tenir au-dessus de la barre, même sur un iPhone SE.
+            AVELiveMark(phase: .idle).frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 2) {
                 Text(firstName.map { "Bonjour \($0)." } ?? "Bonjour.")
                 Text("Que faisons-nous ?").foregroundStyle(.secondary)
@@ -327,7 +329,7 @@ public struct ChatView: View {
                             .padding(.bottom, 2)
                     }
                     if coordinator.supportsTextInput {
-                        TextField("Message", text: $draft, axis: .vertical)
+                        TextField(isEmpty ? "Demandez ce que vous voulez" : "Message", text: $draft, axis: .vertical)
                             .lineLimit(1...6)
                             .focused($composerFocused)
                             .padding(.leading, coordinator.supportsMedia ? 0 : 18)
@@ -358,12 +360,14 @@ public struct ChatView: View {
         .animation(.easeInOut(duration: 0.15), value: canSend)
     }
 
-    /// Un seul bouton rond, dans la barre : « mode vocal » quand le champ est vide, « envoyer » dès qu'on écrit.
+    /// Un seul bouton rond, dans la barre : « envoyer » dès qu'on écrit, « arrêter » pendant une réponse, sinon « mode
+    /// vocal ».
     private var actionButton: some View {
-        Button {
-            if canSend { send() } else { openVoiceMode() }
+        let stops = !canSend && coordinator.isResponding
+        return Button {
+            if canSend { send() } else if stops { Task { await coordinator.stopResponse() } } else { openVoiceMode() }
         } label: {
-            Image(systemName: canSend ? "arrow.up" : "waveform")
+            Image(systemName: canSend ? "arrow.up" : stops ? "stop.fill" : "waveform")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(theme.onAccent)
                 .frame(width: 38, height: 38)
@@ -373,8 +377,8 @@ public struct ChatView: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(canSend ? "Envoyer" : "Mode vocal")
-        .accessibilityHint(canSend ? "" : "Parler avec l'assistant.")
+        .accessibilityLabel(canSend ? "Envoyer" : stops ? "Arrêter la réponse" : "Mode vocal")
+        .accessibilityHint(canSend || stops ? "" : "Parler avec l'assistant.")
     }
 
     private func send() {
@@ -510,13 +514,18 @@ struct Suggestion: Identifiable {
     let detail: String
     let prefix: String?
 
+    /// Questions du quotidien (maquette validée le 2026-10-23) : des débuts de phrase que la personne complète.
     static let all: [Suggestion] = [
-        Suggestion(id: "traduire", symbol: "character.bubble", title: "Traduire", detail: "une phrase en français",
-                   prefix: "Traduis en français : "),
-        Suggestion(id: "ecrire", symbol: "square.and.pencil", title: "Écrire", detail: "un message pour un proche",
-                   prefix: "Écris un message pour "),
-        Suggestion(id: "expliquer", symbol: "questionmark.circle", title: "Expliquer", detail: "un mot ou une idée",
-                   prefix: "Explique-moi simplement : "),
+        Suggestion(id: "organiser", symbol: "creditcard", title: "Organiser", detail: "un budget pour le mois",
+                   prefix: "Aide-moi à faire un budget pour le mois : "),
+        Suggestion(id: "ecrire", symbol: "square.and.pencil", title: "Écrire", detail: "une lettre à la mairie",
+                   prefix: "Écris une lettre à la mairie pour "),
+        Suggestion(id: "comprendre", symbol: "questionmark.circle", title: "Comprendre",
+                   detail: "une facture, un papier officiel", prefix: "Explique-moi simplement ce document : "),
+        Suggestion(id: "chercher", symbol: "magnifyingglass", title: "Chercher", detail: "un horaire, une adresse, une info",
+                   prefix: "Cherche "),
+        Suggestion(id: "cuisiner", symbol: "fork.knife", title: "Cuisiner", detail: "avec ce qu'il reste à la maison",
+                   prefix: "Que puis-je cuisiner avec "),
         Suggestion(id: "parler", symbol: "waveform", title: "Parler", detail: "à voix haute avec AVE", prefix: nil),
     ]
 }
