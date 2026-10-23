@@ -4,7 +4,7 @@ name: AVE
 options:
   bundleIdPrefix: com.tam
   deploymentTarget:
-    iOS: "27.0"                   # décision du propriétaire (2026-10-23) : iOS 27 minimum, compilé avec Xcode 27.1
+    iOS: "27.0"                   # décision du propriétaire (2026-10-23) : iOS 27 minimum (Codemagic : Xcode 27.0)
   createIntermediateGroups: true
   generateEmptyDirectories: false
 settings:

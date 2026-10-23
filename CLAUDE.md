@@ -32,7 +32,7 @@ africaines. Cibles de terrain : iPhone d'entrée de gamme récent, **3G/4G insta
 
 ## Pile et règles
 
-- **iOS 27 minimum, Xcode 27.1** (décision du propriétaire, 2026-10-23), Swift 6 (concurrence stricte), SwiftUI + `@Observable`,
+- **iOS 27 minimum, Xcode 27.1** (décision du propriétaire, 2026-10-23 ; **Codemagic compile avec 27.0** depuis le même jour, accord du propriétaire : plus de machine 27.1 offerte aux comptes gratuits, voir `codemagic.yaml`), Swift 6 (concurrence stricte), SwiftUI + `@Observable`,
   async/await, `AsyncStream`. **Pas de Combine.** Aucune branche `#available` : les composants les plus récents partout.
 - **Exigence du propriétaire : l'app native vise l'excellence et suit le HIG d'Apple.** Composants système d'abord (Liquid Glass :
   `glassEffect`, `GlassEffectContainer`, `.buttonStyle(.glass/.glassProminent)`, barres d'outils système, `safeAreaBar`, feuilles

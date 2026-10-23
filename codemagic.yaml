@@ -7,7 +7,10 @@ workflows:
     max_build_duration: 45
     environment:
       # Version fixée : « latest » désigne la version par défaut de Codemagic (26.6 le 2026-10-23), trop ancienne pour iOS 27.
-      xcode: 27.1
+      # 27.0 et non 27.1 (2026-10-23, accord du propriétaire) : avec 27.1, les builds restaient sur « Preparing build machine »
+      # (aucune machine 27.1 offerte aux comptes gratuits à ce moment-là), comme WoYo le 2026-10-10 (commit 59f3905 de
+      # woyo_app). 27.0 contient le SDK d'iOS 27 ; aucune API propre à 27.1 n'est utilisée. Remonter quand c'est disponible.
+      xcode: 27.0
     triggering:
       events: [push, pull_request]
       branch_patterns:
@@ -57,7 +60,7 @@ workflows:
     environment:
       groups:
         - ave                       # AVE_ENDPOINT (wss://…/v1/stream), AVE_ACCOUNTS_URL (https://…) : adresses réelles
-      xcode: 27.1
+      xcode: 27.0                 # même version que ave-ci (voir l'explication en tête de ce workflow)
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.tam.ave   # Codemagic prend aussi les profils com.tam.ave.* (l'extension Live Activity)
@@ -104,7 +107,7 @@ workflows:
     integrations:
       app_store_connect: TAM_ASC_KEY   # clé API de l'équipe (même nom dans chaque compte Codemagic)
     environment:
-      xcode: 27.1
+      xcode: 27.0                 # même version que ave-ci (voir l'explication en tête de ce workflow)
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.tam.ave   # profils com.tam.ave et com.tam.ave.liveactivity
