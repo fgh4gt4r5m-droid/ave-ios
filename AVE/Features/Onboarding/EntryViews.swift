@@ -22,7 +22,7 @@ public struct EntryNameView: View {
     public var body: some View {
         NavigationStack {
             Form {
-                Section("Comment vous appelez-vous ?") {
+                Section {
                     TextField("Nom complet", text: $name, prompt: Text("Prénom et nom"))
                         .textContentType(.name)
                         .textInputAutocapitalization(.words)
@@ -30,6 +30,9 @@ public struct EntryNameView: View {
                         .submitLabel(.continue)
                         .focused($focused)
                         .onSubmit { Task { await submit() } }
+                } header: {
+                    // `Section("titre") { } footer:` n'existe pas : en-tête et pied s'écrivent tous deux en blocs.
+                    Text("Comment vous appelez-vous ?")
                 } footer: {
                     Text("AVE l'utilise pour vous saluer. Vous pourrez le changer dans les réglages.")
                 }
