@@ -77,8 +77,11 @@ workflows:
       - name: "Archive et export"
         script: |
           set -o pipefail
-          # BUILD_NUMBER : fourni par Codemagic, croît à chaque build du workflow (Apple refuse deux fois le même numéro).
-          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_ENDPOINT="$AVE_ENDPOINT" AVE_ACCOUNTS_URL="$AVE_ACCOUNTS_URL"             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive 2>&1 | tee archive.log | tail -n 40
+          # Numéro de build = date et heure UTC (AAMMJJHHMM) : croissant quel que soit le compte Codemagic ou le workflow
+          # (le compteur BUILD_NUMBER de Codemagic est propre à chaque compte et workflow ; Apple refuse un numéro déjà vu).
+          BUILD_ID=$(date -u +%y%m%d%H%M)
+          echo "Numéro de build : $BUILD_ID"
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_ENDPOINT="$AVE_ENDPOINT" AVE_ACCOUNTS_URL="$AVE_ACCOUNTS_URL"             CURRENT_PROJECT_VERSION="$BUILD_ID" archive 2>&1 | tee archive.log | tail -n 40
           xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa             -exportOptionsPlist "$HOME/export_options.plist"
     artifacts:
       - build/ipa/*.ipa
@@ -87,3 +90,41 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: false   # testeurs internes : le build leur est proposé sans revue après traitement par Apple
+
+  ave-testflight-demo:
+    name: "AVE - TestFlight démo interface (manuel)"
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    # Build à TOUCHER avant que les serveurs existent : faux service de comptes (code 000000, annoncé à l'écran), moteur
+    # injoignable (l'assistant ne répond pas). Export réservé aux testeurs internes : ne peut pas partir sur l'App Store.
+    # Prérequis : les mêmes que ave-testflight SAUF le groupe « ave » (aucune adresse nécessaire).
+    integrations:
+      app_store_connect: TAM_ASC_KEY   # clé API de l'équipe (même nom dans chaque compte Codemagic)
+    environment:
+      xcode: 27.1
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.tam.ave   # profils com.tam.ave et com.tam.ave.liveactivity
+    scripts:
+      - name: "Installer XcodeGen et générer le projet"
+        script: |
+          brew install xcodegen
+          xcodegen generate
+      - name: "Signature (testeurs internes seulement : pas de revue Apple)"
+        script: |
+          xcode-project use-profiles             --export-options-plist "$HOME/export_options.plist"             --custom-export-options='{"testFlightInternalTestingOnly": true}'
+      - name: "Archive démo et export"
+        script: |
+          set -o pipefail
+          BUILD_ID=$(date -u +%y%m%d%H%M)
+          echo "Numéro de build : $BUILD_ID"
+          # AVE_DEMO_ACCOUNTS=YES : faux service de comptes ; AVE_ACCOUNTS_URL vide : aucune adresse de comptes.
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_DEMO_ACCOUNTS=YES AVE_ACCOUNTS_URL=             CURRENT_PROJECT_VERSION="$BUILD_ID" archive 2>&1 | tee archive.log | tail -n 40
+          xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa             -exportOptionsPlist "$HOME/export_options.plist"
+    artifacts:
+      - build/ipa/*.ipa
+      - archive.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false

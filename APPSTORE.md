@@ -87,6 +87,13 @@ fiche de l'app créée). Identifiant de bundle : `com.tam.ave`, écrit dans
    Compter ~20–30 min de build, puis 10–30 min de traitement chez Apple.
 7. **Installer** — chaque testeur reçoit un e-mail, installe l'app **TestFlight** depuis l'App Store, accepte l'invitation, installe AVE.
 
+### En attendant les serveurs : `ave-testflight-demo` (« démo interface »)
+Même parcours **sans l'étape 4** (aucune adresse). Le build utilise le **faux service de comptes** : n'importe quel numéro,
+code **`000000`**, aucun SMS envoyé, ce qu'un bandeau ambre dit sur l'écran de connexion. On touche tous les écrans
+(connexion, conversation, mode vocal, langues, compte) ; le moteur étant injoignable, l'assistant ne répond pas (« Connexion… »).
+Export réservé aux testeurs internes : ce build ne peut pas être soumis à l'App Store. Numéro de build = date et heure UTC
+(`AAMMJJHHMM`) dans les deux workflows : jamais de doublon, même en alternant les deux comptes Codemagic.
+
 **Ce qui fonctionnera, honnêtement** : l'app ne fait rien sans serveurs joignables. Sans moteur ni service de comptes
 déployés (étape 4), on ne dépasse pas l'écran de connexion. L'icône est **provisoire** (`ASSETS.md`).
 

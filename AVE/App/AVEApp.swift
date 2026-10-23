@@ -21,6 +21,8 @@ struct RootView: View {
     @State private var language = AVELanguageSelection()
     @State private var failure: String?
     @State private var showAccount = false
+    /// Vrai quand le faux service de comptes est utilisé : un bandeau le dit sur l'écran de connexion.
+    @State private var usingDevAccounts = false
 
     var body: some View {
         Group {
@@ -33,6 +35,7 @@ struct RootView: View {
                     }
             } else if let signIn {
                 SignInView(model: signIn)
+                    .safeAreaInset(edge: .top) { if usingDevAccounts { devAccountsBanner } }
             } else {
                 ProgressView()
             }
@@ -41,6 +44,17 @@ struct RootView: View {
         .environment(\.aveTheme, .ave)
         .background((AVETheme.ave.background ?? .black).ignoresSafeArea())
         .preferredColorScheme(.dark)
+    }
+
+    /// Honnêteté envers les testeurs : rien n'est réellement vérifié et aucun SMS ne part.
+    private var devAccountsBanner: some View {
+        Label("Build de démonstration : aucun SMS n'est envoyé, le code est 000000.", systemImage: "hammer.fill")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color(AVEPalette.navy))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(AVEPalette.amber), in: .capsule)
+            .padding(.top, 4)
     }
 
     private func bootstrap() async {
@@ -71,10 +85,16 @@ struct RootView: View {
     }
 
     private func makeAccountsAPI(_ env: AppEnvironment) throws -> any AccountsAPI {
+        // Build « démo interface » : le réglage explicite l'emporte sur toute adresse.
+        if env.demoAccounts {
+            usingDevAccounts = true
+            return DevAccountsAPI()
+        }
         if let url = env.accountsURL {
             return try HTTPAccountsAPI(baseURL: url, allowInsecureLocalNetwork: env.allowInsecureLocal)
         }
         #if DEBUG
+        usingDevAccounts = true
         return DevAccountsAPI()  // aucun service de comptes configuré : faux service, développement seulement
         #else
         throw AVEEndpointError.invalidURL
