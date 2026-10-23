@@ -120,7 +120,9 @@ Règles du client (`AVEWebSocketClient`) :
   Voix → l'événement `transcript` s'inscrit comme bulle utilisateur dans le Chat ; l'utilisateur peut ensuite répondre par `text`.
 - **Structure (décision du 2026-10-23)** : comme ChatGPT ou Claude, un seul écran de conversation avec une barre de saisie
   Liquid Glass en bas (texte, envoi, bouton « mode vocal ») ; le **mode vocal** s'ouvre en plein écran (`VoiceModeView`) sur la
-  même session. La conversation s'ouvre en mode texte ; l'accueil vide propose un gros bouton « Parler ».
+  même session. La conversation s'ouvre en mode texte. Révisé le 2026-10-23 après essai sur iPhone (« trop voix d'abord ») :
+  couleurs du système (clair/sombre), accueil sobre, bouton rond unique dans la barre de saisie, nouvelle conversation
+  (un client = une session), voir `ECRANS.md`.
 - **ChatView** : bulles ; la réponse assistant se construit phrase par phrase (`reply_text` par `utterance_id`) ; `action` → `ActionCardView`
   (boutons). **`confirm:true` = bouton de confirmation explicite avant de rendre l'action à l'application hôte** ; la voix seule ne valide jamais.
   `turn_error` → message clair et traduit, pas de silence.

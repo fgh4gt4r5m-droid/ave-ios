@@ -11,6 +11,7 @@ public struct SignInView: View {
     @Bindable var model: SignInViewModel
     @Environment(\.aveTheme) private var theme
     @State private var appleNonce = ""
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var fieldFocused: Bool
 
     public init(model: SignInViewModel) {
@@ -81,7 +82,8 @@ public struct SignInView: View {
                         if (error as? ASAuthorizationError)?.code == .canceled { model.appleCancelled() } else { model.appleFailed() }
                     }
                 }
-                .signInWithAppleButtonStyle(.white)
+                // HIG : bouton noir sur fond clair, blanc sur fond sombre.
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 54)
                 .clipShape(.capsule)  // même forme que les boutons Liquid Glass voisins
                 if model.canUseGuest {

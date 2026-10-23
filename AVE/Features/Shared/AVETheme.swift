@@ -32,19 +32,29 @@ public struct AVETheme: Sendable {
     /// Thème neutre (couleurs système) : défaut pour les apps hôtes, qui injectent leur propre charte.
     public static let standard = AVETheme()
 
-    /// Charte de l'app AVE (logo retenu). Contrastes vérifiés par les tests (`AVEPaletteTests`).
-    /// Bulle de la personne sur la surface (et non sur le bleu vif) : comme dans les assistants de référence, la couleur
-    /// d'accent reste réservée aux actions.
+    /// Charte de l'app AVE, aux standards des assistants d'iOS (ChatGPT, Claude, Gemini ; décision du 2026-10-23) :
+    /// fonds et bulles du SYSTÈME, en apparence claire comme sombre ; la marque ne colore que l'accent (envoi, mode
+    /// vocal, orbe) et les avertissements. Contrastes vérifiés par les tests (`ScreenLogicTests.contrasts`).
     public static let ave = AVETheme(
-        accent: Color(AVEPalette.blue), onAccent: Color(AVEPalette.navy), background: Color(AVEPalette.navy),
-        userBubble: Color(AVEPalette.surface), userBubbleText: Color(AVEPalette.white),
-        assistantBubble: Color(AVEPalette.surface), assistantBubbleText: Color(AVEPalette.white),
-        warning: Color(AVEPalette.amber))
+        accent: .adaptive(light: AVEPalette.blueOnLight, dark: AVEPalette.blue),
+        onAccent: .adaptive(light: AVEPalette.white, dark: AVEPalette.navy),
+        background: nil,
+        userBubble: Color(.secondarySystemBackground), userBubbleText: .primary,
+        assistantBubble: Color(.secondarySystemBackground), assistantBubbleText: .primary,
+        warning: .adaptive(light: AVEPalette.amberOnLight, dark: AVEPalette.amber))
 }
 
 extension Color {
     public init(_ c: AVEColor) {
         self.init(red: Double(c.red) / 255, green: Double(c.green) / 255, blue: Double(c.blue) / 255)
+    }
+
+    /// Couleur qui suit l'apparence du système (claire / sombre).
+    public static func adaptive(light: AVEColor, dark: AVEColor) -> Color {
+        Color(uiColor: UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat(c.red) / 255, green: CGFloat(c.green) / 255, blue: CGFloat(c.blue) / 255, alpha: 1)
+        })
     }
 }
 

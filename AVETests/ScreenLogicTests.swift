@@ -162,6 +162,12 @@ struct BrandAndActivityTests {
         #expect(p.blue.contrast(with: p.navy) >= 4.5)
         #expect(p.violet.contrast(with: p.navy) >= 3)      // décor seulement
         #expect(p.white.contrast(with: p.blue) < 4.5)      // piège connu : blanc sur bleu vif = insuffisant
+        // Apparence claire (fond blanc) et sombre (fond noir du système).
+        #expect(p.blueOnLight.contrast(with: p.white) >= 4.5)   // accent en texte sur blanc
+        #expect(p.white.contrast(with: p.blueOnLight) >= 4.5)   // icône blanche sur le bouton d'accent
+        #expect(p.amberOnLight.contrast(with: p.white) >= 4.5)  // avertissements sur blanc
+        #expect(p.blue.contrast(with: p.black) >= 4.5 && p.amber.contrast(with: p.black) >= 4.5)
+        #expect(p.navy.contrast(with: p.blue) >= 4.5)           // icône bleu nuit sur le bouton d'accent (sombre)
     }
 }
 

@@ -16,16 +16,22 @@ struct MessageBubble: View {
     let onDecline: () -> Void
 
     @Environment(\.aveTheme) private var theme
+    @State private var copied = false
 
     var body: some View {
         switch message.role {
         case .system:
-            Label(message.text, systemImage: "exclamationmark.triangle.fill")
-                .font(.footnote)
-                .foregroundStyle(theme.warning)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .multilineTextAlignment(.center)
-                .accessibilityLabel("Information : \(message.text)")
+            // Texte en couleur normale, seule l'icône porte l'avertissement (lisible en clair comme en sombre).
+            Label {
+                Text(message.text).foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(theme.warning)
+            }
+            .font(.footnote)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Information : \(message.text)")
         case .user:
             Text(message.text)
                 .foregroundStyle(theme.userBubbleText)
@@ -67,9 +73,16 @@ struct MessageBubble: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// Réécouter, avis. Icônes seules (comme les apps de référence), chacune avec un libellé VoiceOver et 44 pt de cible.
+    /// Copier, réécouter, avis : icônes seules sous la réponse, comme ChatGPT et Claude, chacune avec un libellé
+    /// VoiceOver et 44 pt de cible.
     @ViewBuilder private var actions: some View {
         HStack(spacing: 0) {
+            if !message.isVoiceOnly, !message.text.isEmpty {
+                iconButton(copied ? "checkmark" : "doc.on.doc", label: copied ? "Copié" : "Copier") {
+                    UIPasteboard.general.string = message.text
+                    copied = true
+                }
+            }
             if canReplay {
                 iconButton(isReplaying ? "speaker.wave.2.fill" : "speaker.wave.2",
                            label: isReplaying ? "Lecture en cours" : "Réécouter", action: onReplay)

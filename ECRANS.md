@@ -3,6 +3,11 @@
 ## Structure
 - `Features/VoiceAssistant/SessionCoordinator` : une session, deux modes. Relie client WebSocket, audio, machine du
   barge-in, VAD et conversation. Basculer voix ↔ texte coupe le micro, jamais la session.
+- **Standards ChatGPT / Claude / Gemini (2026-10-23, après essai sur iPhone)** : couleurs et fonds du SYSTÈME (clair et
+  sombre ; la marque ne colore que l'accent, en variante assombrie sur fond clair), barre du haut = compte · « AVE + langue ⌄ »
+  · nouvelle conversation, accueil = une question centrée, UNE barre de saisie dont le bouton rond est « mode vocal » champ
+  vide et « envoyer » dès qu'on écrit, mention d'essai en petit sous la saisie, réponses : copier / réécouter / avis.
+  Mode vocal : orbe, état, gros boutons ronds en bas (Interrompre, Terminer). Les maquettes (Artifacts) sont antérieures.
 - `Features/Chat` : `ChatTranscript` (pur, testé), `ChatView` (conversation + barre de saisie Liquid Glass, comme ChatGPT/Claude),
   `MessageBubble` (la personne en bulle, l'assistant en texte libre), cartes d'action, `NoticeBanner`.
 - `Features/VoiceAssistant/VoiceModeView` : mode vocal plein écran ouvert depuis la barre de saisie, même session.

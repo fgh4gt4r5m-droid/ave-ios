@@ -38,13 +38,19 @@ struct VoiceModeView: View {
                     NoticeBanner(text: notice, systemImage: "exclamationmark.triangle.fill",
                                  onDismiss: { coordinator.dismissNotice() })
                 }
-                if state == .speaking {
-                    Button { Task { await coordinator.interruptAssistant() } } label: {
-                        Label("Interrompre", systemImage: "stop.fill").frame(minHeight: 44)
+                // Commandes en bas, comme le mode vocal de ChatGPT : de gros boutons ronds en verre, avec leur nom.
+                GlassEffectContainer(spacing: 28) {
+                    HStack(spacing: 28) {
+                        if state == .speaking {
+                            roundControl("Interrompre", systemImage: "stop.fill") {
+                                Task { await coordinator.interruptAssistant() }
+                            }
+                            .transition(.opacity)
+                        }
+                        roundControl("Terminer", systemImage: "xmark") {
+                            Task { await coordinator.setMode(.text) }
+                        }
                     }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
-                    .transition(.opacity)
                 }
             }
             .padding(.horizontal, 24)
@@ -59,14 +65,25 @@ struct VoiceModeView: View {
                             .labelStyle(.titleAndIcon)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Terminer", systemImage: "xmark") { Task { await coordinator.setMode(.text) } }
-                }
             }
         }
         .sheet(isPresented: $showLanguages) {
             LanguagePicker(selection: $language, options: coordinator.languageOptions)
                 .presentationDetents([.medium, .large])
+        }
+    }
+
+    private func roundControl(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        VStack(spacing: 6) {
+            Button(action: action) {
+                Image(systemName: systemImage)
+                    .font(.title2.weight(.semibold))
+                    .frame(width: 64, height: 64)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel(title)
+            Text(title).font(.footnote).foregroundStyle(.secondary).accessibilityHidden(true)
         }
     }
 

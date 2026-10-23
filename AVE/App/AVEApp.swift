@@ -29,10 +29,14 @@ struct RootView: View {
             if let failure {
                 Text(failure).padding()
             } else if case .signedIn(let kind) = authState, let coordinator, let session {
-                ChatView(coordinator: coordinator, language: $language, onAccount: { showAccount = true })
+                ChatView(coordinator: coordinator, language: $language, onAccount: { showAccount = true },
+                         onNewConversation: { Task { await startNewConversation(kind: kind) } })
                     .sheet(isPresented: $showAccount) {
                         AccountView(session: session, coordinator: coordinator, accountKind: kind)
                     }
+            } else if case .signedIn = authState {
+                // Connecté mais sans session (nouvelle conversation en cours de création) : jamais l'écran de connexion.
+                ProgressView()
             } else if let signIn {
                 SignInView(model: signIn)
                     .safeAreaInset(edge: .top) { if usingDevAccounts { devAccountsBanner } }
@@ -41,9 +45,18 @@ struct RootView: View {
             }
         }
         .task { await bootstrap() }
+        // Apparence du système (claire ou sombre), comme les assistants de référence : plus de bleu nuit imposé.
         .environment(\.aveTheme, .ave)
-        .background((AVETheme.ave.background ?? .black).ignoresSafeArea())
-        .preferredColorScheme(.dark)
+    }
+
+    /// « Nouvelle conversation » : un client = une session côté moteur ; on arrête l'ancienne et on en crée une neuve.
+    private func startNewConversation(kind: AccountKind) async {
+        guard let environment, let session, let old = coordinator else { return }
+        await old.stop()
+        coordinator = nil
+        do { try buildCoordinator(env: environment, auth: session, kind: kind) } catch {
+            failure = UserMessages.audioUnavailable
+        }
     }
 
     /// Honnêteté envers les testeurs : rien n'est réellement vérifié et aucun SMS ne part.
