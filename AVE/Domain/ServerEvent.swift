@@ -30,6 +30,10 @@ public enum ServerEvent: Sendable, Equatable {
     case learningState(enabled: Bool, reason: String, deleted: Int?, noticeVersion: String?)
     /// `stored == false` : pas de consentement, le retour n'a pas été gardé.
     case feedbackAck(stored: Bool)
+    /// Tâches sur fichiers et images (E16). Numérotés : rejoués à la reprise de session.
+    case taskStarted(MediaTaskStarted)
+    case taskDone(MediaTaskResult)
+    case taskError(MediaTaskFailure)
     case unknown(type: String)
 
     public enum TranscriptSource: String, Sendable, Equatable { case voice, text }
@@ -184,6 +188,30 @@ public struct ServerFrame: Sendable, Equatable {
         case "language_set":
             struct B: Decodable { let lang: String }
             event = .languageSet(lang: try body(B.self).lang)
+        case "task_started":
+            struct B: Decodable { let task_id: String; let ref: String?; let kind: String?; let estimated_s: Double? }
+            let b = try body(B.self)
+            event = .taskStarted(MediaTaskStarted(taskID: b.task_id, ref: b.ref ?? "", kind: b.kind.flatMap { MediaTaskKind(rawValue: $0) },
+                                                  estimatedSeconds: b.estimated_s.map { Int($0.rounded()) }))
+        case "task_done":
+            struct B: Decodable {
+                let task_id: String; let ref: String?; let kind: String?; let file_id: String; let file_kind: String?
+                let mime: String; let size: Int; let expires_at: Int; let url: String; let simulated: Bool?
+                let width: Int?; let height: Int?
+            }
+            let b = try body(B.self)
+            // Un `simulated` absent est traité comme `true` : mieux vaut avertir à tort que présenter un faux comme vrai.
+            event = .taskDone(MediaTaskResult(taskID: b.task_id, ref: b.ref ?? "", kind: b.kind.flatMap { MediaTaskKind(rawValue: $0) },
+                                              fileID: b.file_id, fileKind: b.file_kind ?? "", mime: b.mime, size: b.size,
+                                              expiresAt: b.expires_at, url: b.url, simulated: b.simulated ?? true,
+                                              width: b.width, height: b.height))
+        case "task_error":
+            struct B: Decodable {
+                let task_id: String?; let ref: String?; let kind: String?; let code: String; let retry_after_s: Int?
+            }
+            let b = try body(B.self)
+            event = .taskError(MediaTaskFailure(taskID: b.task_id, ref: b.ref ?? "", kind: b.kind.flatMap { MediaTaskKind(rawValue: $0) },
+                                                code: b.code, retryAfterSeconds: b.retry_after_s))
         default:
             event = .unknown(type: env.type)
         }

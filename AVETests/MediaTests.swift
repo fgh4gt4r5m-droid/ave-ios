@@ -1,0 +1,463 @@
+import CoreGraphics
+import Foundation
+import ImageIO
+import Testing
+import UniformTypeIdentifiers
+@testable import AVECore
+@testable import AVEKit
+
+// Fichiers, documents et images (E16, E17) : messages, client HTTP, fil de conversation, historique, session.
+
+/// Faux moteur HTTP : enregistre les requêtes et répond selon le chemin.
+final class FakeFilesServer: @unchecked Sendable {
+    struct Reply {
+        var status: Int
+        var body: Data
+        var headers: [String: String] = [:]
+    }
+
+    private let lock = NSLock()
+    private var _requests: [URLRequest] = []
+    private var replies: [String: Reply] = [:]
+
+    func reply(_ path: String, status: Int, json: String, headers: [String: String] = [:]) {
+        lock.withLock { replies[path] = Reply(status: status, body: Data(json.utf8), headers: headers) }
+    }
+
+    func reply(_ path: String, status: Int, data: Data) {
+        lock.withLock { replies[path] = Reply(status: status, body: data) }
+    }
+
+    var requests: [URLRequest] { lock.withLock { _requests } }
+
+    var send: AVEFilesClient.Send {
+        { [self] request in
+            guard let url = request.url else { throw MediaFileError.network }
+            let reply: Reply? = lock.withLock {
+                _requests.append(request)
+                return replies[url.path]
+            }
+            guard let reply, let http = HTTPURLResponse(url: url, statusCode: reply.status, httpVersion: "HTTP/1.1",
+                                                        headerFields: reply.headers) else {
+                throw MediaFileError.network
+            }
+            return (reply.body, http)
+        }
+    }
+}
+
+private func endpoint() throws -> AVEEndpoint {
+    try AVEEndpoint(try #require(URL(string: "wss://ave-engine.test/v1/stream")))
+}
+
+private func client(_ server: FakeFilesServer, token: String? = "jeton-court") throws -> AVEFilesClient {
+    try AVEFilesClient(endpoint: try endpoint(), tokenProvider: { token }, send: server.send)
+}
+
+/// Petite image PNG fabriquée sur place (aucun fichier de test à embarquer).
+func makePNG(width: Int, height: Int) throws -> Data {
+    let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                         space: CGColorSpaceCreateDeviceRGB(),
+                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.setFillColor(CGColor(red: 0.9, green: 0.5, blue: 0.1, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let image = try #require(context.makeImage())
+    let output = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(output as CFMutableData,
+                                                                    UTType.png.identifier as CFString, 1, nil))
+    CGImageDestinationAddImage(destination, image, nil)
+    #expect(CGImageDestinationFinalize(destination))
+    return output as Data
+}
+
+@Suite("Fichiers et images : protocole")
+struct MediaProtocolTests {
+    private func object(_ m: ClientMessage) throws -> [String: Any] {
+        let s = try m.jsonString()
+        return try #require(try JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any])
+    }
+
+    @Test("image_generate : description, format, qualité, ref")
+    func generate() throws {
+        let o = try object(.task(.imageGenerate(prompt: "Un marché", size: .landscape, quality: .uhd, ref: "r1")))
+        #expect(o["type"] as? String == "image_generate")
+        #expect(o["prompt"] as? String == "Un marché")
+        #expect(o["size"] as? String == "landscape" && o["quality"] as? String == "4k" && o["ref"] as? String == "r1")
+        let bare = try object(.task(.imageGenerate(prompt: "x", size: nil, quality: nil, ref: "r2")))
+        #expect(bare["size"] == nil && bare["quality"] == nil)
+    }
+
+    @Test("retouches : rights_confirmed est un BOOLÉEN, absent pour une image d'AVE")
+    func edits() throws {
+        let edit = try object(.task(.imageEdit(fileID: "f1", instruction: "fond flou", quality: nil, rightsConfirmed: true,
+                                                ref: "r")))
+        #expect(edit["type"] as? String == "image_edit" && edit["file_id"] as? String == "f1")
+        #expect(edit["instruction"] as? String == "fond flou")
+        #expect(edit["rights_confirmed"] as? Bool == true)
+        // JSONSerialization lit `true` comme NSNumber : on vérifie aussi le texte brut, pas "true" entre guillemets.
+        let raw = try ClientMessage.task(.imageEdit(fileID: "f1", instruction: "x", quality: nil, rightsConfirmed: true,
+                                                    ref: "r")).jsonString()
+        #expect(raw.contains(#""rights_confirmed":true"#))
+        let upscale = try object(.task(.imageUpscale(fileID: "f2", target: .hd, rightsConfirmed: nil, ref: "r")))
+        #expect(upscale["type"] as? String == "image_upscale" && upscale["target"] as? String == "1080p")
+        #expect(upscale["rights_confirmed"] == nil)
+        let extend = try object(.task(.imageExtend(fileID: "f3", aspect: .portrait, quality: nil, rightsConfirmed: true,
+                                                    ref: "r")))
+        #expect(extend["type"] as? String == "image_extend" && extend["aspect"] as? String == "portrait")
+    }
+
+    @Test("document_transform et task_cancel")
+    func documentAndCancel() throws {
+        let doc = try object(.task(.documentTransform(fileID: "d1", action: .translate, targetLang: "eng", instruction: nil,
+                                                       ref: "r")))
+        #expect(doc["type"] as? String == "document_transform" && doc["action"] as? String == "translate")
+        #expect(doc["target_lang"] as? String == "eng" && doc["instruction"] == nil)
+        let cancel = try object(.taskCancel(taskID: "t9"))
+        #expect(cancel["type"] as? String == "task_cancel" && cancel["task_id"] as? String == "t9")
+    }
+
+    @Test("task_started, task_done, task_error ; simulated absent = simulé")
+    func events() throws {
+        let started = try ServerFrame.decode(#"{"type":"task_started","seq":4,"task_id":"t1","ref":"r1","kind":"image_generate","estimated_s":35}"#)
+        #expect(started.seq == 4)
+        #expect(started.event == .taskStarted(MediaTaskStarted(taskID: "t1", ref: "r1", kind: .imageGenerate, estimatedSeconds: 35)))
+        let done = try ServerFrame.decode(#"{"type":"task_done","seq":5,"task_id":"t1","ref":"r1","kind":"image_generate","file_id":"f9","file_kind":"png","mime":"image/png","size":1200,"expires_at":1800000000,"url":"/v1/files/f9","width":1920,"height":1920}"#)
+        guard case .taskDone(let result) = done.event else { Issue.record("pas task_done"); return }
+        #expect(result.simulated)  // champ absent : on avertit plutôt que de présenter un faux comme vrai
+        #expect(result.url == "/v1/files/f9" && result.width == 1920 && result.fileKind == "png")
+        let error = try ServerFrame.decode(#"{"type":"task_error","seq":6,"task_id":null,"ref":"r2","kind":"image_generate","code":"quota_exceeded","retry_after_s":3600}"#)
+        #expect(error.event == .taskError(MediaTaskFailure(taskID: nil, ref: "r2", kind: .imageGenerate, code: "quota_exceeded",
+                                                          retryAfterSeconds: 3600)))
+    }
+}
+
+@Suite("Fichiers et images : client HTTP")
+struct MediaFilesClientTests {
+    @Test("adresse HTTP déduite de la WebSocket : même hôte, https")
+    func base() throws {
+        #expect(AVEFilesClient.httpBase(for: try endpoint())?.absoluteString == "https://ave-engine.test")
+    }
+
+    @Test("envoi : POST /v1/files, corps brut, jeton en en-tête, clé d'idempotence")
+    func upload() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/files", status: 201,
+                     json: #"{"file_id":"f1","kind":"pdf","mime":"application/pdf","size":3,"expires_at":1800000000}"#)
+        let uploaded = try await client(server).upload(Data([1, 2, 3]), idempotencyKey: "k1")
+        #expect(uploaded == UploadedFile(fileID: "f1", kind: "pdf", mime: "application/pdf", size: 3, expiresAt: 1_800_000_000))
+        let request = try #require(server.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.absoluteString == "https://ave-engine.test/v1/files")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer jeton-court")
+        #expect(request.value(forHTTPHeaderField: "Idempotency-Key") == "k1")
+        #expect(request.httpBody == Data([1, 2, 3]))
+        #expect(request.url?.query == nil)  // jamais de jeton dans l'URL
+    }
+
+    @Test("erreurs du moteur : code JSON d'abord, sinon statut HTTP")
+    func errors() async throws {
+        let server = FakeFilesServer()
+        let files = try client(server)
+        server.reply("/v1/files", status: 413, json: #"{"error":"file_too_large","max_bytes":10485760}"#)
+        await #expect(throws: MediaFileError.fileTooLarge(maxBytes: 10_485_760)) {
+            _ = try await files.upload(Data([1]), idempotencyKey: "k")
+        }
+        server.reply("/v1/files", status: 429, json: #"{"error":"rate_limited","retry_after_s":12}"#)
+        await #expect(throws: MediaFileError.rateLimited(retryAfterSeconds: 12)) {
+            _ = try await files.upload(Data([1]), idempotencyKey: "k")
+        }
+        server.reply("/v1/files", status: 403, json: "")
+        await #expect(throws: MediaFileError.featureDisabled) { _ = try await files.upload(Data([1]), idempotencyKey: "k") }
+        // Trop lourd : refusé sur l'iPhone, rien n'est envoyé.
+        let before = server.requests.count
+        await #expect(throws: MediaFileError.fileTooLarge(maxBytes: MediaLimits.maxUploadBytes)) {
+            _ = try await files.upload(Data(count: MediaLimits.maxUploadBytes + 1), idempotencyKey: "k")
+        }
+        #expect(server.requests.count == before)
+    }
+
+    @Test("sans jeton : unauthorized, rien n'est envoyé")
+    func noToken() async throws {
+        let server = FakeFilesServer()
+        await #expect(throws: MediaFileError.unauthorized) {
+            _ = try await client(server, token: nil).upload(Data([1]), idempotencyKey: "k")
+        }
+        #expect(server.requests.isEmpty)
+    }
+
+    @Test("téléchargement : seuls les chemins /v1/files du moteur reçoivent le jeton")
+    func download() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/files/f9", status: 200, data: Data([9, 9]))
+        let files = try client(server)
+        #expect(try await files.download(path: "/v1/files/f9") == Data([9, 9]))
+        for bad in ["https://ailleurs.test/v1/files/f9", "/v1/files/../tokens", "/autre/f9"] {
+            await #expect(throws: MediaFileError.badRequest) { _ = try await files.download(path: bad) }
+        }
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("signalement : 202 → identifiant ; 503 reports_disabled → l'app ne dit pas « envoyé »")
+    func report() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/reports", status: 202, json: #"{"report_id":"rep1"}"#)
+        let files = try client(server)
+        #expect(try await files.report(fileID: "f1", taskID: "t1", reason: .realPerson, note: "  ") == "rep1")
+        let body = try #require(server.requests.first?.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["file_id"] as? String == "f1" && json["task_id"] as? String == "t1")
+        #expect(json["reason"] as? String == "real_person")
+        #expect(json["note"] == nil)  // note vide : non envoyée
+        server.reply("/v1/reports", status: 503, json: #"{"error":"reports_disabled"}"#)
+        await #expect(throws: MediaFileError.reportsDisabled) {
+            _ = try await files.report(fileID: "f1", taskID: nil, reason: .other, note: nil)
+        }
+    }
+}
+
+@Suite("Fichiers et images : conversation et historique")
+struct MediaTranscriptTests {
+    private func document(fileID: String? = "f1") -> MediaItem {
+        MediaItem(kind: .document, origin: .attachment, title: "contrat-bail.pdf", localName: "\(UUID().uuidString)/contrat-bail.pdf",
+                  mime: "application/pdf", byteCount: 320_000, fileID: fileID, expiresAt: fileID == nil ? nil : 1_800_000_000)
+    }
+
+    @Test("une tâche : envoi → en cours → téléchargement ; un rejeu du moteur ne change rien")
+    func taskFlow() {
+        var t = ChatTranscript()
+        let request = MediaTaskRequest.imageGenerate(prompt: "x", size: nil, quality: nil, ref: "r1")
+        let id = t.appendTask(MediaTaskCard(ref: "r1", request: request, resultTitle: "Image"))
+        let now = Date(timeIntervalSince1970: 1000)
+        t.applyTask(.taskStarted(MediaTaskStarted(taskID: "t1", ref: "r1", kind: .imageGenerate, estimatedSeconds: 35)), now: now)
+        #expect(t.message(id)?.task?.state == .working(startedAt: now, estimatedSeconds: 35))
+        #expect(t.message(id)?.task?.taskID == "t1")
+        let result = MediaTaskResult(taskID: "t1", ref: "r1", kind: .imageGenerate, fileID: "f9", fileKind: "png",
+                                     mime: "image/png", size: 10, expiresAt: 1_800_000_000, url: "/v1/files/f9",
+                                     simulated: true, width: 1920, height: 1920)
+        let first = t.applyTask(.taskDone(result))
+        #expect(first?.messageID == id)
+        #expect(t.message(id)?.task?.state == .downloading)
+        let replayed = t.applyTask(.taskDone(result))  // rejeu à la reprise de session
+        #expect(replayed?.messageID == nil)
+        // Un événement d'une AUTRE demande ne touche pas cette carte.
+        let other = t.applyTask(.taskError(MediaTaskFailure(taskID: nil, ref: "autre", kind: nil, code: "failed",
+                                                            retryAfterSeconds: nil)))
+        #expect(other?.messageID == nil)
+        #expect(t.message(id)?.task?.state == .downloading)
+    }
+
+    @Test("annulation et refus : la carte le dit, sans détail de modération")
+    func cancelAndRefuse() {
+        var t = ChatTranscript()
+        let a = t.appendTask(MediaTaskCard(ref: "a", request: .imageGenerate(prompt: "x", size: nil, quality: nil, ref: "a"),
+                                           resultTitle: "Image"))
+        let b = t.appendTask(MediaTaskCard(ref: "b", request: .imageGenerate(prompt: "y", size: nil, quality: nil, ref: "b"),
+                                           resultTitle: "Image"))
+        t.applyTask(.taskError(MediaTaskFailure(taskID: "t", ref: "a", kind: nil, code: "cancelled", retryAfterSeconds: nil)))
+        t.applyTask(.taskError(MediaTaskFailure(taskID: nil, ref: "b", kind: nil, code: "content_refused", retryAfterSeconds: nil)))
+        #expect(t.message(a)?.task?.state == .cancelled)
+        #expect(t.message(b)?.task?.state == .failed(code: "content_refused", retryAfterSeconds: nil))
+        #expect(UserMessages.mediaError(code: "content_refused") == "Je ne peux pas créer cette image. Essayez une autre demande.")
+    }
+
+    @Test("historique : fichiers prêts gardés, cartes et envois échoués écartés, anciens historiques lisibles")
+    func history() throws {
+        var t = ChatTranscript()
+        t.appendAttachment(document())
+        var failed = document(fileID: nil)
+        failed.state = .failed(code: "file_too_large")
+        t.appendAttachment(failed)
+        t.appendTask(MediaTaskCard(ref: "r", request: .imageGenerate(prompt: "x", size: nil, quality: nil, ref: "r"),
+                                   resultTitle: "Image"))
+        let stored = ConversationHistory.stored(from: t.messages)
+        #expect(stored.count == 1)
+        #expect(stored.first?.media?.title == "contrat-bail.pdf")
+        #expect(ConversationHistory.title(for: stored) == "contrat-bail.pdf")
+        // Rouvert : même fichier, sans file_id (le moteur l'a oublié).
+        let restored = ChatTranscript(restoring: stored)
+        #expect(restored.messages.first?.media?.fileID == nil)
+        #expect(restored.messages.first?.media?.localName == stored.first?.media?.localName)
+        // Historique d'avant les fichiers : pas de champ `media`.
+        let old = try JSONDecoder().decode(StoredMessage.self, from: Data(#"{"role":"user","text":"salut","interrupted":false,"voiceOnly":false}"#.utf8))
+        #expect(old.media == nil && old.text == "salut")
+    }
+
+    @Test("case d'accord : photo jointe, ou image d'AVE oubliée par le moteur ; jamais pour un document")
+    func rightsRule() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let photo = MediaItem(kind: .image, origin: .attachment, title: "p.jpg", localName: nil, mime: "image/jpeg",
+                              byteCount: 1, fileID: "f", expiresAt: 1_003_600)
+        var generated = photo
+        generated.origin = .generated
+        #expect(photo.requiresRightsForTask(now: now))
+        #expect(!generated.requiresRightsForTask(now: now))
+        generated.expiresAt = 1_000_060  // moins de 2 min : considéré comme oublié
+        #expect(generated.requiresRightsForTask(now: now))
+        #expect(!document().requiresRightsForTask(now: now))
+    }
+
+    @Test("libellés, noms de fichiers, durées")
+    func texts() {
+        #expect(MediaTaskText.documentResultTitle(source: "contrat-bail.pdf", action: .translate, targetLang: "eng")
+                == "contrat-bail (anglais).txt")
+        #expect(MediaTaskText.documentResultTitle(source: "note.docx", action: .summarize, targetLang: nil) == "note (résumé).txt")
+        #expect(MediaTaskText.userLabel(action: .translate, targetLang: "fra", instruction: nil) == "Traduire en français")
+        #expect(MediaTaskText.estimate(35) == "Environ 35 s")
+        #expect(MediaTaskText.estimate(120) == "Environ 2 min")
+        #expect(MediaTaskText.estimate(nil) == nil)
+        #expect(UserMessages.mediaError(code: "quota_exceeded", retryAfterSeconds: 5400)
+                == "Vous avez atteint la limite pour aujourd'hui. Réessayez dans 2 h.")
+        #expect(UserMessages.mediaError(code: "storage_full") == UserMessages.mediaError(code: "engine_unavailable"))
+        #expect(MediaTaskRequest.imageEdit(fileID: "a", instruction: "i", quality: nil, rightsConfirmed: true, ref: "r")
+                    .replacing(fileID: "b", ref: "s")
+                == .imageEdit(fileID: "b", instruction: "i", quality: nil, rightsConfirmed: true, ref: "s"))
+    }
+}
+
+@Suite("Fichiers et images : photos et stockage sur l'iPhone")
+struct MediaLocalTests {
+    @Test("recadrage au centre : carré, portrait 9:16, paysage 16:9")
+    func centerCrop() {
+        #expect(ImageProcessing.centerCrop(width: 4000, height: 3000, aspect: .square) == CGRect(x: 500, y: 0, width: 3000, height: 3000))
+        let portrait = ImageProcessing.centerCrop(width: 4000, height: 3000, aspect: .portrait)
+        #expect(portrait.height == 3000 && abs(portrait.width / portrait.height - 9.0 / 16.0) < 0.01)
+        let landscape = ImageProcessing.centerCrop(width: 3000, height: 4000, aspect: .landscape)
+        #expect(landscape.width == 3000 && abs(landscape.width / landscape.height - 16.0 / 9.0) < 0.01)
+    }
+
+    @Test("préparation : un PNG léger passe tel quel ; recadrer rend un JPEG au bon format")
+    func prepareAndCrop() throws {
+        let png = try makePNG(width: 400, height: 300)
+        let prepared = try #require(ImageProcessing.prepareForUpload(png))
+        #expect(prepared.mime == "image/png" && prepared.data == png && prepared.width == 400 && prepared.height == 300)
+        // Plus grande que 4096 px : réduite et réencodée en JPEG.
+        let wide = try #require(ImageProcessing.prepareForUpload(try makePNG(width: 5000, height: 100)))
+        #expect(wide.mime == "image/jpeg" && max(wide.width, wide.height) == ImageProcessing.maxPixelSize)
+        let square = try #require(ImageProcessing.crop(png, to: .square))
+        #expect(square.mime == "image/jpeg" && square.width == 300 && square.height == 300)
+        #expect(ImageProcessing.prepareForUpload(Data("pas une image".utf8)) == nil)
+    }
+
+    @Test("dossier des fichiers : écrire, relire, refuser ../, purger ce qui n'est plus cité")
+    func store() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ave-media-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = FileMediaStore(directory: dir)
+        let kept = try #require(store.save(Data([1]), fileName: "a/b:c.txt"))
+        let dropped = try #require(store.save(Data([2]), fileName: "x.pdf"))
+        #expect(kept.hasSuffix("/a-b-c.txt"))
+        #expect(store.data(for: kept) == Data([1]))
+        #expect(store.url(for: "../\(kept)") == nil && store.url(for: "\(UUID().uuidString)/..") == nil)
+        store.purge(keeping: [kept])
+        #expect(store.data(for: kept) == Data([1]))
+        #expect(store.data(for: dropped) == nil)
+    }
+}
+
+@MainActor
+@Suite("Fichiers et images : session")
+struct MediaSessionTests {
+    private func harness(_ server: FakeFilesServer) throws -> (Harness, URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ave-media-\(UUID().uuidString)")
+        let media = MediaServices(files: try client(server), store: FileMediaStore(directory: dir))
+        return (try Harness(media: media), dir)
+    }
+
+    @Test("joindre un document puis le traduire : envoi HTTP, tâche WebSocket, résultat téléchargé et gardé")
+    func translateDocument() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/files", status: 201,
+                     json: #"{"file_id":"f1","kind":"pdf","mime":"application/pdf","size":3,"expires_at":4000000000}"#)
+        server.reply("/v1/files/f2", status: 200, data: Data("hello".utf8))
+        let (h, dir) = try harness(server)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let t = try await h.open()
+        let c = h.coordinator
+
+        c.attachDocument(Data([1, 2, 3]), fileName: "contrat-bail.pdf")
+        #expect(c.attachmentDrafts.count == 1)
+        #expect(await eventually { await c.attachmentDrafts.isEmpty })
+        let attachment = try #require(c.transcript.messages.last)
+        #expect(attachment.media?.fileID == "f1" && attachment.role == .user)
+
+        await c.transformDocument(messageID: attachment.id, action: .translate, targetLang: "eng")
+        let sent = try #require(t.sentJSON.last { $0["type"] as? String == "document_transform" })
+        #expect(sent["file_id"] as? String == "f1" && sent["target_lang"] as? String == "eng")
+        let ref = try #require(sent["ref"] as? String)
+        #expect(c.transcript.messages.contains { $0.role == .user && $0.text == "Traduire en anglais" })
+
+        t.serverSend(#"{"type":"task_started","seq":1,"task_id":"t1","ref":"\#(ref)","kind":"document_transform","estimated_s":10}"#)
+        t.serverSend(#"{"type":"task_done","seq":2,"task_id":"t1","ref":"\#(ref)","kind":"document_transform","file_id":"f2","file_kind":"text","mime":"text/plain","size":5,"expires_at":4000000000,"url":"/v1/files/f2","simulated":true}"#)
+        #expect(await eventually { await c.transcript.messages.last?.media?.kind == .document })
+        let result = try #require(c.transcript.messages.last?.media)
+        #expect(result.title == "contrat-bail (anglais).txt" && result.simulated && result.origin == .generated)
+        #expect(c.mediaURL(result).flatMap { try? Data(contentsOf: $0) } == Data("hello".utf8))
+        #expect(c.transcript.messages.last?.task == nil)
+    }
+
+    @Test("retouche d'une photo jointe : rien ne part sans la case d'accord")
+    func rightsRequired() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/files", status: 201,
+                     json: #"{"file_id":"p1","kind":"png","mime":"image/png","size":3,"expires_at":4000000000}"#)
+        let (h, dir) = try harness(server)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let t = try await h.open()
+        let c = h.coordinator
+
+        await c.attachImage(try makePNG(width: 64, height: 48), fileName: "IMG_1.png")
+        #expect(await eventually { await c.transcript.messages.last?.media?.fileID == "p1" })
+        let photo = try #require(c.transcript.messages.last)
+
+        await c.editImage(messageID: photo.id, instruction: "fond flou", rightsConfirmed: false)
+        #expect(!t.sentJSON.contains { $0["type"] as? String == "image_edit" })
+        #expect(c.notice == UserMessages.mediaError(code: "rights_not_confirmed"))
+
+        await c.editImage(messageID: photo.id, instruction: "fond flou", rightsConfirmed: true)
+        let sent = try #require(t.sentJSON.last { $0["type"] as? String == "image_edit" })
+        #expect(sent["rights_confirmed"] as? Bool == true && sent["file_id"] as? String == "p1")
+    }
+
+    @Test("annuler avant task_started : l'annulation part dès que le moteur annonce la tâche")
+    func cancelEarly() async throws {
+        let (h, dir) = try harness(FakeFilesServer())
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let t = try await h.open()
+        let c = h.coordinator
+        await c.createImage(prompt: "Un marché au lever du soleil", size: .square, quality: .hd)
+        let sent = try #require(t.sentJSON.last { $0["type"] as? String == "image_generate" })
+        let ref = try #require(sent["ref"] as? String)
+        let card = try #require(c.transcript.messages.last)
+        await c.cancelTask(messageID: card.id)
+        #expect(c.transcript.message(card.id)?.task?.state == .cancelled)
+        t.serverSend(#"{"type":"task_started","seq":1,"task_id":"t7","ref":"\#(ref)","kind":"image_generate","estimated_s":35}"#)
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "task_cancel" && $0["task_id"] as? String == "t7" } })
+    }
+
+    @Test("signaler : l'image est masquée ; « merci » seulement si le moteur a gardé le signalement")
+    func report() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/reports", status: 503, json: #"{"error":"reports_disabled"}"#)
+        let (h, dir) = try harness(server)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        _ = try await h.open()
+        let c = h.coordinator
+        let id = c.transcript.appendAttachment(MediaItem(kind: .image, origin: .generated, title: "AVE.png", localName: nil,
+                                                         mime: "image/png", byteCount: 1, fileID: "f9", expiresAt: 4_000_000_000))
+        await c.report(messageID: id, reason: .misleading, note: nil)
+        #expect(c.transcript.message(id)?.media?.hidden == true)
+        #expect(c.notice == UserMessages.reportDisabled)
+        server.reply("/v1/reports", status: 202, json: #"{"report_id":"r1"}"#)
+        await c.report(messageID: id, reason: .misleading, note: nil)
+        #expect(c.notice == UserMessages.reportSent)
+    }
+
+    @Test("hors ligne : la demande n'est pas mise en file, la carte propose de réessayer")
+    func offline() async throws {
+        let (h, dir) = try harness(FakeFilesServer())
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let c = h.coordinator
+        await c.createImage(prompt: "x", size: .square, quality: .hd)  // session jamais ouverte
+        #expect(c.transcript.messages.last?.task?.state == .failed(code: "network", retryAfterSeconds: nil))
+    }
+}

@@ -84,3 +84,32 @@ Voir `contrat/CONTRAT.md` §7. Logique pure : `Features/Learning/LearningConsent
 intégration : `SessionCoordinator` ; écrans : `LearningPromptView`, `LearningSettingsView`, 👍/👎 dans les bulles. À valider sur iPhone : lecture
 à voix haute (voix système fr-FR, interaction avec la session audio `.voiceChat`), VoiceOver (pas de double lecture), parcours d'un utilisateur qui ne lit pas.
 **Avant tout lancement : notice relue par un juriste et traduite par des natifs ; rôles de responsable de traitement et durée de conservation à fixer.**
+
+## Fichiers, documents et images (E16, E17 ; maquette validée le 2026-10-23, codé le 2026-10-23)
+Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Signaler un contenu généré »). Code :
+`Core/Network/AVEFilesClient.swift` (HTTP : envoi, téléchargement, signalement), `Domain/MediaTask.swift` (tâches et
+événements `task_*`), `Features/Media/` (modèle, stockage sur l'iPhone, photos, vues, feuilles),
+`SessionCoordinator+Media.swift` (enchaînements). Tests : `AVETests/MediaTests.swift`.
+1. **« + » dans la barre** : Photos (sélecteur du système, sans accès à la photothèque), Appareil photo, Fichier (PDF, Word,
+   texte), Créer une image. Absent quand le moteur n'est pas joignable (démo hors ligne) et pour les apps hôtes sans fichiers.
+2. **Photos** : toujours réencodées en JPEG sur l'iPhone (HEIC refusé par le moteur ; métadonnées EXIF, dont la position,
+   retirées), réduites à 4096 px et sous 10 Mo plutôt que refusées. Un PNG léger part tel quel.
+3. **Envoi** dès le choix, avec aperçu et croix dans la barre ; clé d'idempotence = la pièce jointe (pas de doublon en 3G).
+   Le moteur oublie un fichier en 1 h : avant une tâche, l'app le renvoie depuis l'iPhone si besoin.
+4. **Actions** en raccourcis sous la dernière pièce jointe, et par appui long : photo → Recadrer (sur l'iPhone, sans envoi),
+   Prolonger, Agrandir 1080p/4K, Modifier ; document → Traduire (anglais, français seulement), Résumer, Reformuler.
+5. **Case d'accord** (CGU §2, rien de coché d'avance) avant toute retouche d'une photo envoyée, une fois par photo ; aussi
+   pour une image d'AVE dont le moteur a oublié le fichier (elle repart de l'iPhone comme une photo envoyée).
+6. **Carte de tâche** : durée ANNONCÉE par le moteur (« Environ 35 s »), barre plafonnée à 95 %, « Annuler ». Annuler avant
+   `task_started` : l'annulation part dès que le moteur annonce la tâche. Hors ligne : rien n'est mis en file, « Réessayer ».
+7. **Résultats** : téléchargés aussitôt et gardés avec l'historique (dossier Media, exclu d'iCloud, effacé avec la
+   conversation). Image : « Générée par IA » toujours, « Image de démonstration » + phrase tant que `simulated` ; Enregistrer
+   (Photos, ajout seul), Partager, Refaire, Signaler, Plus. Document : Ouvrir (aperçu d'iOS), Partager, Enregistrer dans Fichiers.
+8. **Signaler** : sept motifs, image masquée tout de suite ; « Merci » seulement si le moteur a gardé le signalement
+   (`reports_disabled` ou image trop ancienne pour le moteur : on le dit).
+
+À vérifier sur iPhone (rien n'a tourné) : sélecteur de photos et appareil photo, conversion HEIC, aperçu QuickLook,
+enregistrement dans Photos et Fichiers, VoiceOver sur les cartes, mise en page des raccourcis en grande taille de texte.
+Côté moteur : les images restent simulées tant que la machine GPU ne tourne pas, et le tenant `ave-grand-public` doit avoir
+les `features` `images` et `documents`, sinon chaque demande répond « Cette fonction n'est pas encore disponible. ».
+Non fait : reprise d'un résultat après le délai de grâce de la session (`GET /v1/tasks/{id}`).

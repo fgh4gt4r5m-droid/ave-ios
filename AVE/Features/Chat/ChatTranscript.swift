@@ -1,4 +1,5 @@
 import AVECore
+import Foundation
 
 /// Intention d'action reçue du serveur (`action`), à exécuter par l'application hôte.
 public struct ActionCard: Sendable, Equatable {
@@ -35,6 +36,10 @@ public struct ChatMessage: Identifiable, Sendable, Equatable {
     /// Réponse parlée dont le texte est inconnu (pas de `reply_text`) : l'UI affiche « Réponse vocale ».
     public var isVoiceOnly: Bool
     public var card: ActionCard?
+    /// Photo ou document joint, image ou document produit (gardé sur l'iPhone).
+    public var media: MediaItem?
+    /// Tâche en cours ou échouée ; remplacée par `media` quand le résultat est téléchargé.
+    public var task: MediaTaskCard?
 }
 
 /// Construit la conversation à partir des événements serveur. Pure, testable.
@@ -58,7 +63,7 @@ public struct ChatTranscript: Sendable, Equatable {
             case .system: role = .system
             }
             append(role: role, text: message.text, status: message.interrupted ? .interrupted : .complete,
-                   voiceOnly: message.voiceOnly)
+                   voiceOnly: message.voiceOnly, media: message.media.map(MediaItem.init(restoring:)))
         }
         if let notice, !stored.isEmpty { appendSystem(notice) }
     }
@@ -136,6 +141,87 @@ public struct ChatTranscript: Sendable, Equatable {
         index(of: id).map { messages[$0] }
     }
 
+    // MARK: Fichiers et images (E16)
+
+    /// La demande de la personne, telle qu'elle la voit (« Traduire en anglais », la description d'une image). Ces demandes
+    /// ne passent pas par `text` : le moteur n'en renvoie pas d'écho `transcript`, la bulle est donc créée ici.
+    @discardableResult
+    public mutating func appendUserRequest(_ text: String) -> Int {
+        append(role: .user, text: text, status: .complete)
+    }
+
+    @discardableResult
+    public mutating func appendAttachment(_ media: MediaItem) -> Int {
+        append(role: .user, text: "", status: .complete, media: media)
+    }
+
+    @discardableResult
+    public mutating func appendTask(_ card: MediaTaskCard) -> Int {
+        append(role: .assistant, text: "", status: .complete, task: card)
+    }
+
+    public mutating func updateMedia(messageID: Int, _ change: (inout MediaItem) -> Void) {
+        guard let i = index(of: messageID), var media = messages[i].media else { return }
+        change(&media)
+        messages[i].media = media
+    }
+
+    public mutating func updateTask(messageID: Int, _ change: (inout MediaTaskCard) -> Void) {
+        guard let i = index(of: messageID), var task = messages[i].task else { return }
+        change(&task)
+        messages[i].task = task
+    }
+
+    /// Le résultat est sur l'iPhone : la carte de tâche devient l'image ou le document.
+    public mutating func completeTask(messageID: Int, with media: MediaItem) {
+        guard let i = index(of: messageID) else { return }
+        messages[i].task = nil
+        messages[i].media = media
+    }
+
+    public func messageID(forTaskRef ref: String) -> Int? {
+        messages.first { $0.task?.ref == ref }?.id
+    }
+
+    /// Applique un événement `task_*` à la carte qui porte son `ref`. Renvoie le résultat à télécharger (`task_done`).
+    /// Sans effet sur une carte déjà terminée : à la reprise de session, le moteur rejoue ses événements numérotés.
+    @discardableResult
+    public mutating func applyTask(_ event: ServerEvent, now: Date = Date()) -> (messageID: Int, result: MediaTaskResult)? {
+        switch event {
+        case .taskStarted(let started):
+            guard let id = messageID(forTaskRef: started.ref), let task = message(id)?.task, task.canCancel else { return nil }
+            updateTask(messageID: id) {
+                $0.taskID = started.taskID
+                if case .working = $0.state { return }
+                $0.state = .working(startedAt: now, estimatedSeconds: started.estimatedSeconds)
+            }
+        case .taskDone(let result):
+            guard let id = messageID(forTaskRef: result.ref), let task = message(id)?.task, !task.isFinished else { return nil }
+            if task.state == .downloading, task.pendingResult == result { return nil }  // rejeu
+            updateTask(messageID: id) {
+                $0.taskID = result.taskID
+                $0.state = .downloading
+                $0.pendingResult = result
+            }
+            return (id, result)
+        case .taskError(let failure):
+            guard let id = messageID(forTaskRef: failure.ref), let task = message(id)?.task, !task.isFinished else { return nil }
+            updateTask(messageID: id) {
+                if let taskID = failure.taskID { $0.taskID = taskID }
+                $0.state = failure.code == "cancelled"
+                    ? .cancelled : .failed(code: failure.code, retryAfterSeconds: failure.retryAfterSeconds)
+            }
+        default:
+            break
+        }
+        return nil
+    }
+
+    /// Noms des fichiers gardés sur l'iPhone par ce fil (pour ne pas les effacer).
+    public var mediaNames: Set<String> {
+        Set(messages.compactMap { $0.media?.localName })
+    }
+
     // MARK: Interne
 
     private func index(of id: Int) -> Int? { messages.firstIndex { $0.id == id } }
@@ -152,11 +238,12 @@ public struct ChatTranscript: Sendable, Equatable {
 
     @discardableResult
     private mutating func append(role: ChatMessage.Role, text: String, status: ChatMessage.Status,
-                                 utteranceID: Int? = nil, voiceOnly: Bool = false, card: ActionCard? = nil) -> Int {
+                                 utteranceID: Int? = nil, voiceOnly: Bool = false, card: ActionCard? = nil,
+                                 media: MediaItem? = nil, task: MediaTaskCard? = nil) -> Int {
         let id = nextID
         nextID += 1
         messages.append(ChatMessage(id: id, role: role, text: text, status: status, utteranceID: utteranceID,
-                                    isVoiceOnly: voiceOnly, card: card))
+                                    isVoiceOnly: voiceOnly, card: card, media: media, task: task))
         return id
     }
 }

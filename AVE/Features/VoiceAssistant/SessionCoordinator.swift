@@ -38,14 +38,15 @@ public final class SessionCoordinator {
     }
 
     // État observable par l'UI
-    public private(set) var transcript = ChatTranscript()
+    // `internal(set)` (et non `private(set)`) : les fichiers et images vivent dans `SessionCoordinator+Media.swift`.
+    public internal(set) var transcript = ChatTranscript()
     public private(set) var phase: BargeInStateMachine.Phase = .idle
     public private(set) var connection: ConnectionState = .idle
     public private(set) var mode: SessionMode
     public private(set) var micLevel: Float = 0
     public private(set) var playbackLevel: Float = 0
     /// Dernier message d'état à montrer (erreur, perte de données…). `nil` = rien à signaler.
-    public private(set) var notice: String?
+    public internal(set) var notice: String?
     public private(set) var replayingMessageID: Int?
     /// Langues avec leur disponibilité réelle (`ready.languages`), sinon la liste de repli.
     public private(set) var languageOptions: [LanguageOption] = LanguageCatalog.builtIn
@@ -62,6 +63,8 @@ public final class SessionCoordinator {
     public private(set) var pendingTexts: [PendingText] = []
     /// Micro coupé en mode vocal (sans quitter le mode vocal) : rien n'est capté ni envoyé.
     public private(set) var micMuted = false
+    /// Pièces jointes en cours d'envoi, montrées dans la barre de saisie.
+    public internal(set) var attachmentDrafts: [AttachmentDraft] = []
     /// Réglage « Lire les réponses à voix haute » en mode texte. L'audio est TOUJOURS gardé pour « Lire à voix haute ».
     public var autoPlayInTextMode = true
     /// Type de compte de l'app AVE (`nil` : app hôte, WoYo/TaGa…). Un INVITÉ n'est pas sollicité pour l'apprentissage : sa clé de
@@ -79,7 +82,10 @@ public final class SessionCoordinator {
     /// Appelé APRÈS accord explicite de l'utilisateur (ou si le serveur dit `confirm: false`).
     @ObservationIgnored public var onAction: (@MainActor (ActionCard) -> Void)?
 
-    @ObservationIgnored private let client: AVEWebSocketClient
+    @ObservationIgnored let client: AVEWebSocketClient
+    /// `nil` : pas de fichiers ni d'images (app hôte, démo hors ligne).
+    @ObservationIgnored let media: MediaServices?
+    @ObservationIgnored var uploadTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let devices: AudioDevices
     @ObservationIgnored private let configuration: Configuration
     @ObservationIgnored private let learningPreferences: any LearningPreferences
@@ -105,8 +111,10 @@ public final class SessionCoordinator {
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
                 configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil,
                 language: AVELanguage = .french, learningPreferences: any LearningPreferences = InMemoryLearningPreferences(),
-                accountKind: AccountKind? = nil, transcript: ChatTranscript = ChatTranscript()) {
+                accountKind: AccountKind? = nil, transcript: ChatTranscript = ChatTranscript(),
+                media: MediaServices? = nil) {
         self.transcript = transcript
+        self.media = media
         self.activity = activity
         self.accountKind = accountKind
         self.selectedLanguage = language
@@ -152,6 +160,9 @@ public final class SessionCoordinator {
     public func stop() async {
         for t in tasks { t.cancel() }
         tasks = []
+        for upload in uploadTasks.values { upload.cancel() }
+        uploadTasks = [:]
+        attachmentDrafts = []
         turnTimer?.cancel()
         stopMic()
         devices.player.purge()
@@ -510,6 +521,8 @@ public final class SessionCoordinator {
             }
         case .feedbackAck(let stored):
             if stored { learningMessage = UserMessages.feedbackThanks }
+        case .taskStarted, .taskDone, .taskError:
+            handleTask(event)
         case .action, .replyText, .transcript:
             if let auto = transcript.apply(event), let card = auto.card { onAction?(card) }
         default:

@@ -160,8 +160,8 @@ Règles du client (`AVEWebSocketClient`) :
 1. `GET /v1/languages` : langues, région, statut (`planned|experimental|production`) pour le sélecteur.
 2. Message `speak {text, lang}` : synthèse à la demande (bouton « lire »), sans passer par le LLM.
 3. Échange de jeton court (`POST /v1/token`) pour ne pas embarquer une clé durable dans l'app.
-4. **Pièces jointes** (prévues par le propriétaire, 2026-10-23) : envoi d'une photo ou d'un fichier par l'app, et réception
-   d'un fichier produit par l'assistant (document, image). À définir d'abord dans le protocole du moteur, puis `contrat/`.
+4. **Pièces jointes** : FAIT côté moteur (E16, E17, `contrat/` fusionné) et codé dans l'app le 2026-10-23 (`ECRANS.md`,
+   « Fichiers, documents et images ») ; non compilé à la date de l'écriture, rien n'a tourné sur iPhone.
 5. **Reprise d'une conversation avec son contexte** : aujourd'hui l'historique est local et l'assistant repart sans mémoire.
 6. **Réponses écrites au fil de l'eau** (morceaux de phrase) et **choix de la voix** : rendus attendus des grandes apps.
 7. **Génération de documents ou d'images** par l'assistant : outils côté moteur (appels d'outils du LLM), jamais dans l'app.

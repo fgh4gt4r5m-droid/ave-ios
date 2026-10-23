@@ -142,6 +142,22 @@ public actor AVEWebSocketClient {
         return true
     }
 
+    /// Demande une tâche sur un fichier ou une image (E16). Renvoie `false` hors ligne : l'appelant le dit à l'utilisateur.
+    /// Une tâche n'est pas mise en file hors ligne : une image demandée il y a dix minutes n'est peut-être plus voulue.
+    @discardableResult
+    public func sendTask(_ request: MediaTaskRequest) async -> Bool {
+        guard isReady else { return false }
+        await send(message: .task(request))
+        return true
+    }
+
+    @discardableResult
+    public func cancelTask(taskID: String) async -> Bool {
+        guard isReady else { return false }
+        await send(message: .taskCancel(taskID: taskID))
+        return true
+    }
+
     /// Change la langue de la session ; mémorisée pour les reconnexions.
     public func setLanguage(_ new: AVELanguage) async {
         language = new

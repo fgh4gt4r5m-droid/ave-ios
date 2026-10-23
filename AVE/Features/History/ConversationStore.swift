@@ -28,12 +28,59 @@ public struct StoredMessage: Codable, Sendable, Equatable {
     public var text: String
     public var interrupted: Bool
     public var voiceOnly: Bool
+    /// Photo, image ou document de ce message (facultatif : les historiques d'avant les fichiers n'en ont pas).
+    public var media: StoredMedia?
 
-    public init(role: Role, text: String, interrupted: Bool = false, voiceOnly: Bool = false) {
+    public init(role: Role, text: String, interrupted: Bool = false, voiceOnly: Bool = false, media: StoredMedia? = nil) {
         self.role = role
         self.text = text
         self.interrupted = interrupted
         self.voiceOnly = voiceOnly
+        self.media = media
+    }
+}
+
+/// Ce qu'on garde d'un fichier dans l'historique. Pas de `file_id` : le moteur l'a oublié au bout d'1 h ; le fichier sera
+/// renvoyé depuis l'iPhone si une nouvelle tâche le demande. L'accord coché pour une photo est redemandé (nouvelle session).
+public struct StoredMedia: Codable, Sendable, Equatable {
+    public var kind: MediaItem.Kind
+    public var origin: MediaItem.Origin
+    public var title: String
+    public var localName: String
+    public var mime: String
+    public var byteCount: Int
+    public var width: Int?
+    public var height: Int?
+    public var simulated: Bool
+    public var hidden: Bool
+
+    public init(kind: MediaItem.Kind, origin: MediaItem.Origin, title: String, localName: String, mime: String,
+                byteCount: Int, width: Int? = nil, height: Int? = nil, simulated: Bool = false, hidden: Bool = false) {
+        self.kind = kind
+        self.origin = origin
+        self.title = title
+        self.localName = localName
+        self.mime = mime
+        self.byteCount = byteCount
+        self.width = width
+        self.height = height
+        self.simulated = simulated
+        self.hidden = hidden
+    }
+
+    init?(_ media: MediaItem) {
+        guard media.state == .ready, let localName = media.localName else { return nil }
+        self.init(kind: media.kind, origin: media.origin, title: media.title, localName: localName, mime: media.mime,
+                  byteCount: media.byteCount, width: media.width, height: media.height, simulated: media.simulated,
+                  hidden: media.hidden)
+    }
+}
+
+extension MediaItem {
+    init(restoring stored: StoredMedia) {
+        self.init(kind: stored.kind, origin: stored.origin, title: stored.title, localName: stored.localName,
+                  mime: stored.mime, byteCount: stored.byteCount, width: stored.width, height: stored.height,
+                  simulated: stored.simulated, hidden: stored.hidden)
     }
 }
 
@@ -131,7 +178,8 @@ public enum ConversationHistory {
 
     /// Titre automatique : la première question de la personne, raccourcie (comme les assistants de référence).
     public static func title(for messages: [StoredMessage]) -> String {
-        guard let first = messages.first(where: { $0.role == .user && !$0.text.isEmpty })?.text else {
+        guard let first = messages.first(where: { $0.role == .user && !$0.text.isEmpty })?.text
+            ?? messages.first(where: { $0.role == .user && $0.media != nil })?.media?.title else {
             return "Conversation vocale"
         }
         let line = first.split(whereSeparator: \.isNewline).first.map(String.init) ?? first
@@ -187,6 +235,11 @@ public enum ConversationHistory {
         }
     }
 
+    /// Fichiers cités par ces conversations : tout le reste du dossier Media peut être effacé.
+    public static func mediaNames(in conversations: [StoredConversation]) -> Set<String> {
+        Set(conversations.flatMap { $0.messages.compactMap { $0.media?.localName } })
+    }
+
     /// Ce qu'on garde du fil : les messages lisibles, sans cartes d'action ni bulles en cours de construction vides.
     public static func stored(from messages: [ChatMessage]) -> [StoredMessage] {
         messages.compactMap { message in
@@ -197,11 +250,15 @@ public enum ConversationHistory {
             case .assistant: role = .assistant
             case .system: role = .system
             }
-            if message.text.isEmpty && !message.isVoiceOnly { return nil }
+            // Cartes de tâche (en cours, échouées, annulées) : sans objet une fois la session finie.
+            if message.task != nil { return nil }
+            let media = message.media.flatMap(StoredMedia.init)
+            if message.media != nil && media == nil { return nil }  // envoi échoué ou fichier non gardé
+            if message.text.isEmpty && !message.isVoiceOnly && media == nil { return nil }
             // Messages système (erreurs, « reprise sans mémoire ») : utiles sur le moment, pas dans l'historique.
             if role == .system { return nil }
             return StoredMessage(role: role, text: message.text, interrupted: message.status == .interrupted,
-                                 voiceOnly: message.isVoiceOnly)
+                                 voiceOnly: message.isVoiceOnly, media: media)
         }
     }
 }

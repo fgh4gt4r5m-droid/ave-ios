@@ -26,6 +26,8 @@ struct RootView: View {
     @State private var usingDevAccounts = false
     /// Historique gardé sur l'iPhone (`nil` si le dossier de l'app est inaccessible : l'app marche sans historique).
     @State private var store: (any ConversationStore)? = FileConversationStore.standard()
+    /// Photos jointes, images et documents produits, gardés sur l'iPhone avec l'historique.
+    @State private var mediaStore: (any MediaStore)? = FileMediaStore.standard()
     @State private var conversations: [StoredConversation] = []
     @State private var currentConversationID: UUID?
 
@@ -66,6 +68,7 @@ struct RootView: View {
         .onAppear {
             language = AVELanguageSelection(language: AVELanguage(rawValue: languageCode) ?? .french)
             conversations = store?.list() ?? []
+            purgeMedia()
         }
         .onChange(of: language) { _, new in languageCode = new.language.rawValue }
         .onChange(of: autoPlay) { _, new in coordinator?.autoPlayInTextMode = new }
@@ -160,12 +163,25 @@ struct RootView: View {
         store?.delete(id: id)
         conversations.removeAll { $0.id == id }
         if currentConversationID == id { currentConversationID = nil }
+        purgeMedia()
     }
 
     private func clearHistory() {
         store?.deleteAll()
         conversations = []
         currentConversationID = nil
+        purgeMedia()
+    }
+
+    /// Efface les fichiers qu'aucune conversation ne cite plus : conversation effacée, historique désactivé, envoi
+    /// abandonné. Ceux du fil affiché et des pièces jointes en cours d'envoi sont gardés.
+    private func purgeMedia() {
+        var keep = ConversationHistory.mediaNames(in: conversations)
+        if let coordinator {
+            keep.formUnion(coordinator.transcript.mediaNames)
+            keep.formUnion(coordinator.attachmentDrafts.compactMap(\.localName))
+        }
+        mediaStore?.purge(keeping: keep)
     }
 
     /// « Nouvelle conversation » : un client = une session côté moteur ; on arrête l'ancienne et on en crée une neuve.
@@ -191,6 +207,7 @@ struct RootView: View {
         do { try buildCoordinator(env: environment, auth: session, kind: kind, transcript: transcript) } catch {
             failure = UserMessages.audioUnavailable
         }
+        purgeMedia()
     }
 
     // MARK: Raccourcis (Siri, bouton Action)
@@ -292,6 +309,12 @@ struct RootView: View {
         let client = env.demoOffline
             ? configuration.makeClient(language: language.language, transportFactory: DemoEngineTransport.factory)
             : configuration.makeClient(language: language.language)
+        // Fichiers et images : routes HTTP du moteur, même jeton court. Pas en démo hors ligne (aucun moteur).
+        var media: MediaServices?
+        if !env.demoOffline, let mediaStore,
+           let files = try? AVEFilesClient(endpoint: env.endpoint, tokenProvider: tokenProvider) {
+            media = MediaServices(files: files, store: mediaStore)
+        }
         var sessionConfiguration = SessionCoordinator.Configuration()
         if env.demoOffline {
             sessionConfiguration.demoNotice = UserMessages.demoOffline
@@ -304,7 +327,7 @@ struct RootView: View {
                                      configuration: sessionConfiguration,
                                      activity: SessionLiveActivityController(), language: language.language,
                                      learningPreferences: UserDefaultsLearningPreferences(),
-                                     accountKind: kind, transcript: transcript)
+                                     accountKind: kind, transcript: transcript, media: media)
         new.autoPlayInTextMode = autoPlay
         coordinator = new
         consumeVoiceRequest()

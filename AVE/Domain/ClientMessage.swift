@@ -17,6 +17,10 @@ public enum ClientMessage: Sendable, Equatable {
     case interrupt
     case ping(t: Double)
     case bye
+    /// Tâche sur un fichier ou une image (E16) ; la réponse arrive par les événements `task_*`, reliés par `ref`.
+    case task(MediaTaskRequest)
+    /// Pas de réponse directe : la tâche émet `task_error {code:"cancelled"}`.
+    case taskCancel(taskID: String)
 
     public struct Hello: Sendable, Equatable {
         public var version: Int = 1
@@ -52,6 +56,9 @@ extension ClientMessage: Encodable {
         case lastSeq = "last_seq", token, meta, t, vad, client, text
         // `version` (déjà déclaré ci-dessus) sert aussi à `learning_consent` : même clé JSON.
         case granted, utteranceID = "utterance_id", rating, correction
+        // Tâches (E16)
+        case prompt, size, quality, ref, fileID = "file_id", instruction, rightsConfirmed = "rights_confirmed"
+        case target, aspect, action, targetLang = "target_lang", taskID = "task_id"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -99,6 +106,37 @@ extension ClientMessage: Encodable {
             try c.encode(t, forKey: .t)
         case .bye:
             try c.encode("bye", forKey: .type)
+        case .task(let request):
+            try c.encode(request.kind.rawValue, forKey: .type)
+            try c.encode(request.ref, forKey: .ref)
+            switch request {
+            case .imageGenerate(let prompt, let size, let quality, _):
+                try c.encode(prompt, forKey: .prompt)
+                try c.encodeIfPresent(size?.rawValue, forKey: .size)
+                try c.encodeIfPresent(quality?.rawValue, forKey: .quality)
+            case .imageEdit(let fileID, let instruction, let quality, let rightsConfirmed, _):
+                try c.encode(fileID, forKey: .fileID)
+                try c.encode(instruction, forKey: .instruction)
+                try c.encodeIfPresent(quality?.rawValue, forKey: .quality)
+                try c.encodeIfPresent(rightsConfirmed, forKey: .rightsConfirmed)
+            case .imageUpscale(let fileID, let target, let rightsConfirmed, _):
+                try c.encode(fileID, forKey: .fileID)
+                try c.encode(target.rawValue, forKey: .target)
+                try c.encodeIfPresent(rightsConfirmed, forKey: .rightsConfirmed)
+            case .imageExtend(let fileID, let aspect, let quality, let rightsConfirmed, _):
+                try c.encode(fileID, forKey: .fileID)
+                try c.encode(aspect.rawValue, forKey: .aspect)
+                try c.encodeIfPresent(quality?.rawValue, forKey: .quality)
+                try c.encodeIfPresent(rightsConfirmed, forKey: .rightsConfirmed)
+            case .documentTransform(let fileID, let action, let targetLang, let instruction, _):
+                try c.encode(fileID, forKey: .fileID)
+                try c.encode(action.rawValue, forKey: .action)
+                try c.encodeIfPresent(targetLang, forKey: .targetLang)
+                try c.encodeIfPresent(instruction, forKey: .instruction)
+            }
+        case .taskCancel(let taskID):
+            try c.encode("task_cancel", forKey: .type)
+            try c.encode(taskID, forKey: .taskID)
         }
     }
 

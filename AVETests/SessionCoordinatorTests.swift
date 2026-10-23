@@ -71,7 +71,7 @@ struct Harness {
 
     init(permission: Bool = true, turnTimeout: Duration = .seconds(30), activity: (any SessionActivityPresenting)? = nil,
          language: AVELanguage = .french, preferences: InMemoryLearningPreferences = InMemoryLearningPreferences(),
-         notices: [LearningNoticeText] = LearningNotice.all) throws {
+         notices: [LearningNoticeText] = LearningNotice.all, media: MediaServices? = nil) throws {
         self.preferences = preferences
         guard let url = URL(string: "wss://ave.test/v1/stream") else { throw Bad() }
         let client = AVEWebSocketClient(
@@ -89,7 +89,8 @@ struct Harness {
         coordinator = SessionCoordinator(
             client: client,
             devices: AudioDevices(mic: mic, player: player, lifecycle: FakeLifecycle(permission: permission)),
-            configuration: config, activity: activity, language: language, learningPreferences: preferences)
+            configuration: config, activity: activity, language: language, learningPreferences: preferences,
+            media: media)
         let box = actions
         coordinator.onAction = { card in box.add(card.name) }
     }

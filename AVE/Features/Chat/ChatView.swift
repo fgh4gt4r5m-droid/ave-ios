@@ -1,6 +1,8 @@
 #if os(iOS)
 import AVECore
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Écran principal, aux standards des assistants d'iOS (ChatGPT, Claude, Gemini ; proposition 2 validée le 2026-10-23) :
 /// - barre du haut système : historique à gauche, titre (conversation ou « AVE ») + langue au centre, nouvelle
@@ -8,7 +10,8 @@ import SwiftUI
 /// - accueil : salutation et quatre suggestions qui remplissent la barre d'un toucher ;
 /// - réponses mises en forme, actions (copier, lire, partager, réessayer, avis), appui long = menu natif ;
 /// - messages écrits hors connexion affichés « en attente », envoyés au retour du réseau ;
-/// - UNE barre de saisie Liquid Glass ; le mode vocal s'ouvre en plein écran sur la MÊME session.
+/// - UNE barre de saisie Liquid Glass ; le mode vocal s'ouvre en plein écran sur la MÊME session ;
+/// - « + » dans la barre : photo, appareil photo, fichier, créer une image (maquette validée le 2026-10-23).
 public struct ChatView: View {
     let coordinator: SessionCoordinator
     @Binding var language: AVELanguageSelection
@@ -29,6 +32,11 @@ public struct ChatView: View {
     @State private var showLanguages = false
     @State private var correctionTarget: Int?
     @State private var sentCount = 0
+    @State private var mediaSheet: MediaSheet?
+    @State private var showPhotos = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showFiles = false
+    @State private var showCamera = false
     @FocusState private var composerFocused: Bool
     @Environment(\.aveTheme) private var theme
 
@@ -72,6 +80,28 @@ public struct ChatView: View {
                 correctionTarget = nil
             }
             .presentationDetents([.medium])
+        }
+        .sheet(item: $mediaSheet) { sheet in mediaSheetView(sheet) }
+        .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            photoItem = nil
+            Task {
+                // Le sélecteur de photos ne donne pas le nom du fichier sans accès à la photothèque : « Photo ».
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    await coordinator.attachImage(data, fileName: "Photo")
+                }
+            }
+        }
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: Self.importableTypes) { result in
+            if case .success(let url) = result { importFile(at: url) }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { data in
+                showCamera = false
+                if let data { Task { await coordinator.attachImage(data, fileName: "Photo.jpg") } }
+            }
+            .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: voiceModeBinding) {
             VoiceModeView(coordinator: coordinator, language: $language, captions: $captions, haptics: haptics)
@@ -129,7 +159,9 @@ public struct ChatView: View {
 
     // MARK: Conversation
 
-    private var isEmpty: Bool { coordinator.transcript.messages.isEmpty && coordinator.pendingTexts.isEmpty }
+    private var isEmpty: Bool {
+        coordinator.transcript.messages.isEmpty && coordinator.pendingTexts.isEmpty && coordinator.attachmentDrafts.isEmpty
+    }
 
     private var messages: some View {
         ScrollViewReader { proxy in
@@ -137,22 +169,29 @@ public struct ChatView: View {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     statusLine
                     ForEach(coordinator.transcript.messages) { message in
-                        MessageBubble(
-                            message: message,
-                            canReadAloud: coordinator.canReadAloud(messageID: message.id),
-                            isReplaying: coordinator.replayingMessageID == message.id,
-                            canFeedback: coordinator.canGiveFeedback,
-                            feedbackSent: coordinator.feedbackGiven.contains(message.id),
-                            onFeedback: { rating in
-                                if rating == .up { Task { await coordinator.sendFeedback(messageID: message.id, rating: .up) } }
-                                else { correctionTarget = message.id }
-                            },
-                            onReplay: { Task { await coordinator.readAloud(messageID: message.id) } },
-                            onConfirm: { coordinator.confirmAction(messageID: message.id) },
-                            onDecline: { coordinator.declineAction(messageID: message.id) },
-                            onRetry: retryAction(for: message),
-                            onEdit: editAction(for: message))
-                        .id(message.id)
+                        if message.media != nil || message.task != nil {
+                            MediaMessageView(message: message, coordinator: coordinator,
+                                             showsActions: message.id == coordinator.transcript.messages.last?.id,
+                                             onSheet: { mediaSheet = $0 })
+                            .id(message.id)
+                        } else {
+                            MessageBubble(
+                                message: message,
+                                canReadAloud: coordinator.canReadAloud(messageID: message.id),
+                                isReplaying: coordinator.replayingMessageID == message.id,
+                                canFeedback: coordinator.canGiveFeedback,
+                                feedbackSent: coordinator.feedbackGiven.contains(message.id),
+                                onFeedback: { rating in
+                                    if rating == .up { Task { await coordinator.sendFeedback(messageID: message.id, rating: .up) } }
+                                    else { correctionTarget = message.id }
+                                },
+                                onReplay: { Task { await coordinator.readAloud(messageID: message.id) } },
+                                onConfirm: { coordinator.confirmAction(messageID: message.id) },
+                                onDecline: { coordinator.declineAction(messageID: message.id) },
+                                onRetry: retryAction(for: message),
+                                onEdit: editAction(for: message))
+                            .id(message.id)
+                        }
                     }
                     ForEach(coordinator.pendingTexts) { pending in
                         PendingBubble(text: pending.text)
@@ -274,24 +313,37 @@ public struct ChatView: View {
 
     private var composer: some View {
         VStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 4) {
-                if coordinator.supportsTextInput {
-                    TextField("Message", text: $draft, axis: .vertical)
-                        .lineLimit(1...6)
-                        .focused($composerFocused)
-                        .padding(.leading, 18)
-                        .padding(.vertical, 14)
-                } else {
-                    Text(UserMessages.textInputUnavailable)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 18)
-                        .padding(.vertical, 14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 0) {
+                // Pièces jointes en cours d'envoi, dans la barre (maquette 2).
+                ForEach(coordinator.attachmentDrafts) { draft in
+                    AttachmentDraftRow(draft: draft, url: draft.localName.flatMap { coordinator.mediaURL(named: $0) },
+                                       onRemove: { coordinator.cancelAttachment(draft.id) })
+                        .padding(.top, 6)
                 }
-                actionButton
-                    .padding(.trailing, 4)
-                    .padding(.bottom, 2)
+                HStack(alignment: .bottom, spacing: 4) {
+                    if coordinator.supportsMedia {
+                        attachMenu
+                            .padding(.leading, 4)
+                            .padding(.bottom, 2)
+                    }
+                    if coordinator.supportsTextInput {
+                        TextField("Message", text: $draft, axis: .vertical)
+                            .lineLimit(1...6)
+                            .focused($composerFocused)
+                            .padding(.leading, coordinator.supportsMedia ? 0 : 18)
+                            .padding(.vertical, 14)
+                    } else {
+                        Text(UserMessages.textInputUnavailable)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 18)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    actionButton
+                        .padding(.trailing, 4)
+                        .padding(.bottom, 2)
+                }
             }
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
             if let demo = coordinator.demoNotice {
@@ -331,6 +383,109 @@ public struct ChatView: View {
         sentCount += 1
         Task { await coordinator.sendText(message) }
     }
+
+    // MARK: Fichiers et images
+
+    /// Le « + » : un menu système juste au-dessus de la barre (maquette 1).
+    private var attachMenu: some View {
+        Menu {
+            Button { showPhotos = true } label: {
+                Label { Text("Photos"); Text("Depuis la photothèque") } icon: { Image(systemName: "photo.on.rectangle") }
+            }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Appareil photo", systemImage: "camera") { showCamera = true }
+            }
+            Button { showFiles = true } label: {
+                Label { Text("Fichier"); Text("PDF, Word, texte · 10 Mo max") } icon: { Image(systemName: "doc") }
+            }
+            Button("Créer une image", systemImage: "sparkles") { mediaSheet = .createImage }
+        } label: {
+            Image(systemName: "plus")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
+        }
+        .accessibilityLabel("Joindre ou créer")
+    }
+
+    static let importableTypes: [UTType] =
+        [.pdf, .plainText, .image] + [UTType(filenameExtension: "docx")].compactMap { $0 }
+
+    /// Fichier choisi dans Fichiers : une image passe par la préparation des photos, le reste part tel quel.
+    private func importFile(at url: URL) {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let name = url.lastPathComponent
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        let kind: MediaItem.Kind = isImage ? .image : .document
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        // Ne pas charger en mémoire un fichier refusé de toute façon (une photo peut être réduite : marge ×5).
+        let limit = isImage ? MediaLimits.maxUploadBytes * 5 : MediaLimits.maxUploadBytes
+        guard size <= limit else {
+            coordinator.rejectAttachment(fileName: name, byteCount: size, kind: kind, code: "file_too_large")
+            return
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            coordinator.rejectAttachment(fileName: name, byteCount: size, kind: kind, code: "file_missing")
+            return
+        }
+        if isImage {
+            Task { await coordinator.attachImage(data, fileName: name) }
+        } else {
+            coordinator.attachDocument(data, fileName: name)
+        }
+    }
+
+    @ViewBuilder private func mediaSheetView(_ sheet: MediaSheet) -> some View {
+        switch sheet {
+        case .createImage:
+            CreateImageSheet { prompt, size, quality in
+                Task { await coordinator.createImage(prompt: prompt, size: size, quality: quality) }
+            }
+            .presentationDetents([.medium, .large])
+        case .edit(let id):
+            EditImageSheet(needsRights: needsRights(id)) { instruction, rights in
+                Task { await coordinator.editImage(messageID: id, instruction: instruction, rightsConfirmed: rights) }
+            }
+            .presentationDetents([.medium, .large])
+        case .rights(let id, let action):
+            RightsSheet(actionTitle: Self.title(of: action)) {
+                Task {
+                    switch action {
+                    case .upscale(let target):
+                        await coordinator.upscaleImage(messageID: id, target: target, rightsConfirmed: true)
+                    case .extend(let aspect):
+                        await coordinator.extendImage(messageID: id, aspect: aspect, rightsConfirmed: true)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        case .rewrite(let id):
+            RewriteSheet { instruction in
+                Task { await coordinator.transformDocument(messageID: id, action: .rewrite, instruction: instruction) }
+            }
+            .presentationDetents([.medium])
+        case .report(let id):
+            ReportSheet { reason, note in
+                Task { await coordinator.report(messageID: id, reason: reason, note: note) }
+            }
+            .presentationDetents([.large])
+        }
+    }
+
+    private func needsRights(_ messageID: Int) -> Bool {
+        guard let media = coordinator.transcript.message(messageID)?.media else { return false }
+        return media.requiresRightsForTask() && !media.rightsConfirmed
+    }
+
+    private static func title(of action: MediaSheet.RightsAction) -> String {
+        switch action {
+        case .upscale(let target): return target == .uhd ? "Agrandir en 4K" : "Agrandir en 1080p"
+        case .extend(let aspect): return "Prolonger en \(MediaFormat.aspect(aspect).lowercased())"
+        }
+    }
+
 
     // MARK: Mode vocal
 

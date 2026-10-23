@@ -20,6 +20,10 @@
 	<array><string>UIInterfaceOrientationPortrait</string></array>
 	<key>UIBackgroundModes</key>
 	<array><string>audio</string></array>
+	<key>NSCameraUsageDescription</key>
+	<string>AVE utilise l'appareil photo seulement quand vous prenez une photo à joindre à la conversation.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>AVE enregistre dans Photos les images que vous choisissez d'enregistrer. Il ne lit jamais votre photothèque.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>AVE utilise le micro pour vous écouter quand vous parlez à l'assistant. Le son n'est envoyé que pendant que vous parlez.</string>
 	<key>NSSupportsLiveActivities</key><true/>
