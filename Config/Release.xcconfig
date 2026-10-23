@@ -1,6 +1,7 @@
-// Réglages RELEASE. Les adresses ci-dessous sont des PLACEHOLDERS (domaine « .example », inexistant) : à remplacer par les
-// vraies adresses (ici ou par variables d'environnement Codemagic passées à xcodebuild). wss/https uniquement.
-AVE_ENDPOINT = wss:/$()/api.ave.example/v1/stream
+// Réglages RELEASE. wss/https uniquement. Le workflow ave-testflight les remplace par le groupe de variables « ave » de
+// Codemagic. Moteur : adresse réelle sur Render (vérifiée le 2026-10-23). Comptes : encore un PLACEHOLDER (« .example »,
+// inexistant) tant que le service ave-accounts n'est pas créé sur Render.
+AVE_ENDPOINT = wss:/$()/ave-engine.onrender.com/v1/stream
 AVE_ALLOW_INSECURE_LOCAL = NO
 AVE_ACCOUNTS_URL = https:/$()/accounts.ave.example
 AVE_DEFAULT_COUNTRY_CODE = 224

@@ -95,9 +95,11 @@ workflows:
     name: "AVE - TestFlight démo interface (manuel)"
     instance_type: mac_mini_m2
     max_build_duration: 60
-    # Build à TOUCHER avant que le moteur soit en ligne (2026-10-23) : moteur de démo HORS LIGNE sur l'iPhone (annoncé à
-    # l'écran) et VRAI service de comptes sur Render (préproduction) s'il répond ; sinon faux service (code 000000, annoncé
-    # à l'écran). Le journal du build dit lequel. Export réservé aux testeurs internes : ne peut pas partir sur l'App Store.
+    # Build à TOUCHER (2026-10-23). Si le service de comptes répond sur Render : vrais comptes (vrais codes) et VRAI moteur
+    # (en ligne sur Render depuis le 2026-10-23 ; il répond encore par écho avec un son de test, avis « Version d'essai »).
+    # Sinon : faux service de comptes (code 000000) et moteur de démo HORS LIGNE sur l'iPhone, tous deux annoncés à
+    # l'écran (le jeton du faux service n'ouvre pas le vrai moteur). Le journal du build dit lequel. Export réservé aux
+    # testeurs internes : ne peut pas partir sur l'App Store.
     # Prérequis : les mêmes que ave-testflight SAUF le groupe « ave ».
     integrations:
       app_store_connect: TAM_ASC_KEY   # clé API de l'équipe (même nom dans chaque compte Codemagic)
@@ -109,6 +111,9 @@ workflows:
       vars:
         # Adresse du service de comptes sur Render (préproduction). Si Render en affiche une autre, la changer ici.
         AVE_RENDER_ACCOUNTS_URL: https://ave-accounts.onrender.com
+        # Moteur sur Render (adresse donnée par la session moteur et vérifiée le 2026-10-23 : /healthz répond).
+        AVE_RENDER_ENGINE_URL: wss://ave-engine.onrender.com/v1/stream
+        AVE_RENDER_ENGINE_HEALTH: https://ave-engine.onrender.com/healthz
     scripts:
       - name: "Installer XcodeGen et générer le projet"
         script: |
@@ -122,16 +127,21 @@ workflows:
           set -o pipefail
           BUILD_ID=$(date -u +%y%m%d%H%M)
           echo "Numéro de build : $BUILD_ID"
-          # Vrai service de comptes s'il répond (/healthz), sinon faux service (code 000000, annoncé dans l'app).
+          # Vrais comptes ET vrai moteur si les deux répondent ; sinon tout en démo (faux comptes, moteur hors ligne).
+          DEMO_ACCOUNTS=YES; ACCOUNTS_URL=""; DEMO_OFFLINE=YES; ENDPOINT="$AVE_RENDER_ENGINE_URL"
           if curl -fsS -m 30 "$AVE_RENDER_ACCOUNTS_URL/healthz" > /dev/null; then
-            echo "Service de comptes en ligne : $AVE_RENDER_ACCOUNTS_URL (vrais codes par SMS ou WhatsApp)"
             DEMO_ACCOUNTS=NO; ACCOUNTS_URL="$AVE_RENDER_ACCOUNTS_URL"
+            # Render peut mettre une minute à réveiller un service : deux essais.
+            if curl -fsS -m 60 "$AVE_RENDER_ENGINE_HEALTH" > /dev/null || curl -fsS -m 60 "$AVE_RENDER_ENGINE_HEALTH" > /dev/null; then
+              DEMO_OFFLINE=NO
+              echo "Comptes ET moteur en ligne : vrais codes, vrai moteur ($AVE_RENDER_ENGINE_URL)"
+            else
+              echo "Comptes en ligne, moteur injoignable : vrais codes, moteur de démo hors ligne"
+            fi
           else
-            echo "Service de comptes injoignable : build avec le FAUX service (code 000000)"
-            DEMO_ACCOUNTS=YES; ACCOUNTS_URL=""
+            echo "Service de comptes injoignable : FAUX service (code 000000) et moteur de démo hors ligne"
           fi
-          # AVE_DEMO_OFFLINE=YES : moteur de démo hors ligne sur l'iPhone (le vrai moteur n'est pas encore en ligne).
-          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_DEMO_OFFLINE=YES AVE_DEMO_ACCOUNTS="$DEMO_ACCOUNTS" AVE_ACCOUNTS_URL="$ACCOUNTS_URL"             CURRENT_PROJECT_VERSION="$BUILD_ID" archive 2>&1 | tee archive.log | tail -n 40
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_DEMO_OFFLINE="$DEMO_OFFLINE" AVE_DEMO_ACCOUNTS="$DEMO_ACCOUNTS" AVE_ACCOUNTS_URL="$ACCOUNTS_URL"             AVE_ENDPOINT="$ENDPOINT"             CURRENT_PROJECT_VERSION="$BUILD_ID" archive 2>&1 | tee archive.log | tail -n 40
           xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa             -exportOptionsPlist "$HOME/export_options.plist"
     artifacts:
       - build/ipa/*.ipa
