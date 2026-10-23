@@ -17,22 +17,31 @@ public final class SignInViewModel {
     public private(set) var errorMessage: String?
     /// Secondes avant de pouvoir redemander un code (donné par le service).
     public private(set) var resendAfterSeconds: Int?
+    /// Numéro saisi SANS indicatif (l'indicatif est choisi à part, `countryCode`). Un numéro tapé avec « + » reste accepté.
     public var phoneInput = ""
     public var codeInput = ""
     public var channel: OTPChannel = .sms
+    /// Indicatif choisi (sans « + », ex. « 224 »), proposé d'avance : on ne le tape pas.
+    public var countryCode: String?
+    /// Moment de l'envoi du dernier code : pour afficher le décompte avant de pouvoir en redemander un.
+    public private(set) var codeSentAt: Date?
+
+    /// Longueur des codes du service de comptes.
+    public static let codeLength = 6
 
     @ObservationIgnored private let api: any AccountsAPI
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let attester: (any GuestAttesting)?
-    @ObservationIgnored private let defaultCountryCode: String?
     @ObservationIgnored private var challengeID: String?
+    /// Dernier code envoyé automatiquement : un code faux n'est pas renvoyé en boucle, seul un nouveau code part.
+    @ObservationIgnored private var lastSubmittedCode: String?
 
     public init(api: any AccountsAPI, session: AuthSession, attester: (any GuestAttesting)? = nil,
                 defaultCountryCode: String? = nil) {
         self.api = api
         self.session = session
         self.attester = attester
-        self.defaultCountryCode = defaultCountryCode
+        self.countryCode = defaultCountryCode
     }
 
     public var canUseGuest: Bool { attester != nil }
@@ -45,6 +54,7 @@ public final class SignInViewModel {
     public func back() {
         errorMessage = nil
         codeInput = ""
+        lastSubmittedCode = nil
         switch step {
         case .code: step = .phone
         case .phone, .welcome: step = .welcome
@@ -52,7 +62,7 @@ public final class SignInViewModel {
     }
 
     public func sendCode() async {
-        guard let phone = PhoneNumber(phoneInput, defaultCountryCode: defaultCountryCode) else {
+        guard let phone = PhoneNumber(phoneInput, defaultCountryCode: countryCode) else {
             errorMessage = AuthMessages.message(for: .invalidPhone)
             return
         }
@@ -60,9 +70,33 @@ public final class SignInViewModel {
             let challenge = try await self.api.requestOTP(phone: phone, channel: self.channel)
             self.challengeID = challenge.id
             self.resendAfterSeconds = challenge.retryAfterSeconds
+            self.codeSentAt = Date()
             self.codeInput = ""
+            self.lastSubmittedCode = nil
             self.step = .code(phoneMasked: phone.masked)
         }
+    }
+
+    /// À chaque frappe dans le code : ne garde que les chiffres (6 au plus). Renvoie vrai quand le code est complet et
+    /// pas encore essayé : la vue le valide alors toute seule, sans bouton (le code du SMS se colle d'un toucher).
+    public func codeDidChange() -> Bool {
+        let digits = String(codeInput.filter { ("0"..."9").contains($0) }.prefix(Self.codeLength))
+        if digits != codeInput { codeInput = digits }
+        guard digits.count == Self.codeLength, digits != lastSubmittedCode, !isWorking else { return false }
+        lastSubmittedCode = digits
+        return true
+    }
+
+    /// Secondes avant de pouvoir redemander un code, à l'instant `now` (`nil` : on peut redemander).
+    public func resendCountdown(at now: Date = Date()) -> Int? {
+        guard let wait = resendAfterSeconds, let sentAt = codeSentAt else { return nil }
+        let remaining = wait - Int(now.timeIntervalSince(sentAt).rounded(.down))
+        return remaining > 0 ? remaining : nil
+    }
+
+    /// « Renvoyer un code » : même numéro, même canal.
+    public func resendCode() async {
+        await sendCode()
     }
 
     public func verifyCode() async {

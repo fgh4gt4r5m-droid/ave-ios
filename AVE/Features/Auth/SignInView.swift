@@ -43,27 +43,26 @@ public struct SignInView: View {
 
     // MARK: Accueil
 
+    /// Connexion (maquette d'entrée validée le 2026-10-23) : le logo au repos, un titre, et les deux connexions au même
+    /// niveau (exigé par Apple) ; « Essayer sans compte » reste discret.
     private var welcome: some View {
         VStack(spacing: 16) {
             Spacer()
-            VStack(spacing: 10) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 52, weight: .semibold))
-                    .foregroundStyle(theme.accent)
-                    .accessibilityHidden(true)
-                Text("AVE").font(.system(size: 52, weight: .bold, design: .rounded))
-                Text("African Voice Engine").font(.headline).foregroundStyle(.secondary)
+            AVELiveMark(phase: .idle).frame(width: 96, height: 96)
+            VStack(spacing: 8) {
+                Text("Connectez-vous")
+                    .font(.title.weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
+                // Ce qu'un compte apporte vraiment, sans rien promettre de plus.
+                Text("Avec votre numéro ou votre compte Apple. Vous pourrez supprimer votre compte à tout moment.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("AVE, African Voice Engine")
-            Text("Parlez à l'assistant dans votre langue.")
-                .font(.title3)
-                .multilineTextAlignment(.center)
-                .padding(.top, 8)
             Spacer()
             errorLabel
             VStack(spacing: 12) {
-                primaryButton("Avec mon numéro de téléphone", systemImage: "phone.fill") { model.choosePhone() }
+                primaryButton("Continuer avec mon numéro", systemImage: "phone.fill") { model.choosePhone() }
                 SignInWithAppleButton(.continue) { request in
                     appleNonce = Self.randomNonce()
                     request.requestedScopes = []  // ni nom ni e-mail : on n'en a pas besoin
@@ -86,16 +85,13 @@ public struct SignInView: View {
                 }
                 // HIG : bouton noir sur fond clair, blanc sur fond sombre.
                 .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                .frame(height: 54)
-                .clipShape(.capsule)  // même forme que les boutons Liquid Glass voisins
+                .frame(height: 52)
+                .clipShape(.capsule)  // même forme et même hauteur que le bouton du numéro : même poids
                 if model.canUseGuest {
-                    Button { Task { await model.continueAsGuest() } } label: {
-                        Label("Essayer sans compte", systemImage: "person.fill.questionmark")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
+                    Button("Essayer sans compte") { Task { await model.continueAsGuest() } }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .tint(theme.accent)
                 }
             }
             Text("En continuant, vous acceptez les conditions d'utilisation et la politique de confidentialité.")
@@ -109,14 +105,19 @@ public struct SignInView: View {
 
     // MARK: Numéro
 
+    /// L'indicatif se choisit (proposé d'avance) : on ne tape que son numéro. Un numéro collé avec « + » reste accepté.
     private var phone: some View {
         Form {
             Section {
-                TextField("Numéro de téléphone", text: $model.phoneInput, prompt: Text("+224 6xx xx xx xx"))
-                    .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
-                    .font(.title3)
-                    .focused($fieldFocused)
+                HStack(spacing: 12) {
+                    countryMenu
+                    Divider()
+                    TextField("Numéro de téléphone", text: $model.phoneInput, prompt: Text("6xx xx xx xx"))
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                        .font(.title3)
+                        .focused($fieldFocused)
+                }
             } footer: {
                 Text("Nous envoyons un code à 6 chiffres pour vérifier que c'est bien vous.")
             }
@@ -142,40 +143,103 @@ public struct SignInView: View {
         .onAppear { fieldFocused = true }
     }
 
-    // MARK: Code
-
-    private func code(_ masked: String) -> some View {
-        Form {
-            Section {
-                TextField("Code reçu", text: $model.codeInput, prompt: Text("000000"))
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .font(.system(.largeTitle, design: .monospaced).weight(.semibold))
-                    .tracking(8)
-                    .multilineTextAlignment(.center)
-                    .focused($fieldFocused)
-            } header: {
-                Text("Envoyé au \(masked)")
-            } footer: {
-                if let seconds = model.resendAfterSeconds {
-                    Text("Pas reçu ? Vous pourrez redemander un code dans \(seconds) s.")
+    private var countryMenu: some View {
+        let selected = PhoneCountry.forDialCode(model.countryCode)
+        let code = model.countryCode ?? ""
+        return Menu {
+            Picker("Indicatif", selection: countryBinding) {
+                ForEach(PhoneCountry.all) { country in
+                    Text("\(country.flag) \(country.name)  +\(country.dialCode)").tag(country.dialCode)
                 }
             }
-            if let message = model.errorMessage {
-                Section { errorText(message) }
+        } label: {
+            HStack(spacing: 4) {
+                Text(selected.map { "\($0.flag) +\(code)" } ?? (code.isEmpty ? "Pays" : "+\(code)"))
+                    .font(.title3.weight(.semibold))
+                Image(systemName: "chevron.down").font(.caption.weight(.semibold))
             }
-            Section {
-                Button("Changer de numéro") { model.back() }
-            }
+            .foregroundStyle(.primary)
+            .frame(minHeight: 44)
         }
-        .scrollContentBackground(.hidden)
+        .accessibilityLabel("Indicatif")
+        .accessibilityValue(selected.map { "\($0.name), plus \(code)" } ?? (code.isEmpty ? "aucun" : "plus \(code)"))
+    }
+
+    private var countryBinding: Binding<String> {
+        Binding(get: { model.countryCode ?? "" }, set: { model.countryCode = $0 })
+    }
+
+    // MARK: Code
+
+    /// Six cases ; le code reçu par SMS se propose au-dessus du clavier (`oneTimeCode`) et il est validé dès qu'il est
+    /// complet, sans bouton. Un vrai champ texte, invisible, reçoit la saisie : VoiceOver et le collage marchent.
+    private func code(_ masked: String) -> some View {
+        VStack(spacing: 20) {
+            Text("Envoyé au \(masked)")
+                .foregroundStyle(.secondary)
+            codeBoxes
+            resendLine
+            if let message = model.errorMessage { errorText(message) }
+            Button("Changer de numéro") { model.back() }
+                .font(.headline)
+                .frame(minHeight: 44)
+                .tint(theme.accent)
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
         .navigationTitle("Code reçu")
-        .safeAreaBar(edge: .bottom) {
-            primaryButton("Valider", systemImage: "checkmark") { Task { await model.verifyCode() } }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 8)
-        }
         .onAppear { fieldFocused = true }
+        .onChange(of: model.codeInput) { _, _ in
+            if model.codeDidChange() { Task { await model.verifyCode() } }
+        }
+    }
+
+    private var codeBoxes: some View {
+        let digits = Array(model.codeInput)
+        return ZStack {
+            HStack(spacing: 8) {
+                ForEach(0..<SignInViewModel.codeLength, id: \.self) { index in
+                    Text(index < digits.count ? String(digits[index]) : "")
+                        .font(.title.weight(.semibold))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.5)
+                        .frame(width: 46, height: 56)
+                        .background(theme.assistantBubble, in: .rect(cornerRadius: 12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(fieldFocused && index == min(digits.count, SignInViewModel.codeLength - 1)
+                                              ? theme.accent : Color.clear, lineWidth: 2)
+                        }
+                }
+            }
+            .accessibilityHidden(true)
+            TextField("Code reçu", text: $model.codeInput)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($fieldFocused)
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .frame(height: 56)
+        }
+        .contentShape(.rect)
+        .onTapGesture { fieldFocused = true }
+    }
+
+    /// Décompte avant de pouvoir redemander un code, puis « Renvoyer un code ».
+    private var resendLine: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            if let seconds = model.resendCountdown(at: context.date) {
+                Text("Pas reçu ? Nouveau code dans \(seconds) s.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button("Renvoyer un code") { Task { await model.resendCode() } }
+                    .font(.footnote.weight(.semibold))
+                    .frame(minHeight: 44)
+                    .tint(theme.accent)
+            }
+        }
     }
 
     // MARK: Éléments communs

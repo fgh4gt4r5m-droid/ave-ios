@@ -39,6 +39,15 @@
   peut affiner les points de `africaTrace` sans toucher aux animations.
 - Avis « Version d'essai » : `SessionCoordinator.Configuration.demoNotice`, activé par `AVE_DEMO_ENGINE` (xcconfig) tant que le
   moteur répond par écho avec une voix de test.
+- **Écrans d'entrée et mot AVE (maquettes validées le 2026-10-23)** : https://claude.ai/artifact/NbMeb9X23PNU8uwaNF7rbr et
+  https://claude.ai/artifact/NheM8vLbqjYwhNdmAFw3df. `Features/Shared/AVEWordmarkGeometry` (pur, testé, mesures en pixels
+  du fichier du propriétaire) + `AVEWordmark` (le A puis le V se tracent, les barres du E s'allongent, le point tombe,
+  puis le sous-titre ; en clair lettres `#1C1C1E` et dernière barre `#00BFD6`). Bienvenue : logo qui naît, mot dessous
+  sur le même axe, slogan « Nos langues · votre avenir » (seul écran qui le montre). Connexion : logo au repos, numéro et
+  Apple au même poids, « Essayer sans compte » discret. Numéro : indicatif à choisir (`PhoneCountry`, +224 d'avance).
+  Code : six cases sur un vrai champ invisible (`oneTimeCode`, VoiceOver, collage), validé seul dès 6 chiffres
+  (`SignInViewModel.codeDidChange`, jamais deux fois le même code), décompte puis « Renvoyer un code ». Les fichiers de
+  marque sont dans « DOSSIER AVE » sur le bureau du propriétaire.
 - **Démo hors ligne (2026-10-23)** : `AVE_DEMO_OFFLINE=YES`, seulement dans le workflow `ave-testflight-demo`. Le client parle
   à `Kit/DemoEngineTransport` (faux serveur sur l'iPhone, VRAI protocole : ready, transcript, reply_text, voix de test,
   tts_end, turn_end, interrupt, speak, ping) au lieu du moteur, sans jeton. Il fait ce que le moteur fait aujourd'hui

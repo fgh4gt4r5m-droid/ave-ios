@@ -47,21 +47,25 @@ public struct OnboardingView: View {
         .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
     }
 
+    /// Bienvenue (maquette d'entrée validée le 2026-10-23) : le logo naît puis se pose au repos, le mot AVE s'écrit
+    /// dessous, sur le même axe, puis le slogan. C'est le seul écran qui montre le slogan.
     private var welcome: some View {
-        VStack(spacing: 26) {
+        VStack(spacing: 18) {
             Spacer()
             // Naissance du logo (cercle → Afrique), puis repos : l'Afrique dessinée par les barres.
             AVELiveMark(phase: .idle, entrance: true).frame(width: 170, height: 170)
-            VStack(spacing: 12) {
-                Text("Votre assistant, dans votre langue.")
-                    .font(.largeTitle.weight(.bold))
-                    .multilineTextAlignment(.center)
-                Text("Parlez ou écrivez. AVE vous répond à voix haute et par écrit.")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            // Le mot attend la fin de la naissance du logo, puis s'écrit.
+            AVEWordmark(width: 210, delay: 1.2)
+            Text("NOS LANGUES · VOTRE AVENIR")
+                .font(.caption.weight(.medium))
+                .tracking(2)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Nos langues, votre avenir")
             Spacer()
+            Text("Parlez ou écrivez.\nAVE vous répond à voix haute et par écrit.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .transition(.opacity)
     }

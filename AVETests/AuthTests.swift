@@ -414,6 +414,47 @@ struct SignInViewModelTests {
         #expect(v2.errorMessage != nil)
     }
 
+    @Test("indicatif choisi : le numéro national suffit ; un numéro avec « + » garde le sien")
+    func chosenCountryCode() async {
+        let (vm, _, api) = make()
+        #expect(vm.countryCode == "224")  // proposé d'avance
+        vm.countryCode = "221"
+        vm.phoneInput = "77 123 45 67"
+        await vm.sendCode()
+        #expect(api.calls == ["otp:+221771234567:sms"])
+        let (other, _, api2) = make()
+        other.phoneInput = "+33 6 12 34 56 78"
+        await other.sendCode()
+        #expect(api2.calls == ["otp:+33612345678:sms"])
+    }
+
+    @Test("code : seuls les chiffres, 6 au plus ; complet = validé une seule fois, un nouveau code repart")
+    func codeAutoSubmit() async {
+        let (vm, _, _) = make()
+        vm.phoneInput = "621234567"
+        await vm.sendCode()
+        vm.codeInput = "12 3a4"
+        #expect(!vm.codeDidChange())
+        #expect(vm.codeInput == "1234")
+        vm.codeInput = "1234567"
+        #expect(vm.codeDidChange())
+        #expect(vm.codeInput == "123456")
+        #expect(!vm.codeDidChange())  // même code : pas renvoyé en boucle
+        vm.codeInput = "123450"
+        #expect(vm.codeDidChange())  // nouveau code : il part
+    }
+
+    @Test("renvoi : décompte depuis l'envoi, puis plus de décompte")
+    func resendCountdown() async {
+        let (vm, _, _) = make()
+        #expect(vm.resendCountdown() == nil)  // aucun code envoyé
+        vm.phoneInput = "621234567"
+        await vm.sendCode()
+        let sent = Date()
+        #expect((vm.resendCountdown(at: sent) ?? 0) > 25)  // le service a demandé 30 s
+        #expect(vm.resendCountdown(at: sent.addingTimeInterval(31)) == nil)
+    }
+
     @Test("retour : code → téléphone → accueil, erreur effacée")
     func back() async {
         let (vm, _, _) = make()
