@@ -50,6 +50,10 @@ public enum UserMessages {
     public static let noResponse = "L'assistant n'a pas répondu. Vous pouvez réessayer."
     public static let microphoneDenied = "Accès au micro refusé : le mode vocal est désactivé. Vous pouvez l'autoriser dans les Réglages."
     public static let audioUnavailable = "Impossible d'activer l'audio sur cet appareil."
+    public static let dictationDenied = "Dictée refusée : vous pouvez autoriser la reconnaissance vocale dans les Réglages."
+    /// Pas de repli sur les serveurs d'Apple : sans reconnaissance du français sur l'iPhone, pas de dictée.
+    public static let dictationUnavailable =
+        "La dictée n'est pas disponible sur cet iPhone : il ne reconnaît pas le français sans envoyer le son."
     public static let textInputUnavailable = "La saisie de texte n'est pas disponible avec ce serveur."
     public static func learningRevoked(deleted: Int?) -> String {
         guard let deleted, deleted > 0 else { return "Votre aide a été retirée." }

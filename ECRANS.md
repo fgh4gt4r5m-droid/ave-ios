@@ -169,6 +169,10 @@ une maquette HTML ne montre qu'une intention.
   mis d'avance. Profil gardé par `ave-accounts` (`/account/profile`) et sur l'iPhone. Conditions et politique de
   confidentialité : brouillons dans l'app (`Terms`), à faire relire par un juriste ; changer leur fond = changer
   `Terms.currentVersion`, l'accord est alors redemandé.
-- **Pas fait** : le bouton micro de dictée de la maquette (iOS ne laisse pas une app ouvrir la dictée du clavier ; il faut
-  la reconnaissance vocale d'Apple, avec une autorisation de plus : décision du propriétaire attendue). Les sources (D8)
-  attendent le moteur de recherche. Non vérifié : tout l'aspect à l'écran et la fluidité de la lumière sur un vrai iPhone.
+- **Dictée** (décision du propriétaire, 2026-10-23) : le micro de la barre utilise la reconnaissance vocale d'Apple SUR
+  L'IPHONE (`DictationRecognizer`, `requiresOnDeviceRecognition`) ; sans reconnaissance locale du français, la dictée n'est
+  pas proposée (jamais de repli sur les serveurs d'Apple). Un toucher : on dicte, le texte s'écrit à la suite de la barre ;
+  second toucher : fini ; rien ne part sans « Envoyer ». Autorisation `NSSpeechRecognitionUsageDescription`. La politique
+  de confidentialité le dit : conditions passées en `2026-10-v2`, l'accord est redemandé.
+- **Pas fait** : les sources (D8) attendent le moteur de recherche. Non vérifié : tout l'aspect à l'écran, la fluidité de la
+  lumière, et la dictée pendant qu'une session audio est ouverte (deux moteurs audio) sur un vrai iPhone.

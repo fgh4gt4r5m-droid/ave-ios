@@ -40,6 +40,7 @@ public struct ChatView: View {
     @State private var showCamera = false
     /// Idées rangées par défaut : une pastille « Idées » ; un toucher les déploie (maquette validée le 2026-10-23).
     @State private var ideasOpen = false
+    @State private var dictation = DictationController()
     @FocusState private var composerFocused: Bool
     @Environment(\.aveTheme) private var theme
 
@@ -367,6 +368,7 @@ public struct ChatView: View {
                 HStack(spacing: 4) {
                     if coordinator.supportsMedia { attachMenu }
                     Spacer(minLength: 0)
+                    if coordinator.supportsTextInput { dictationButton }
                     actionButton
                 }
                 .padding(.horizontal, 4)
@@ -389,6 +391,31 @@ public struct ChatView: View {
         .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.15), value: canSend)
         .onChange(of: draft) { _, new in if !new.isEmpty, ideasOpen { withAnimation(.snappy) { ideasOpen = false } } }
+    }
+
+    /// Micro de dictée : la reconnaissance d'Apple, sur l'iPhone ; le texte s'écrit dans la barre, rien ne part seul.
+    private var dictationButton: some View {
+        Button {
+            if dictation.isListening {
+                dictation.finish()
+            } else {
+                Task {
+                    if let message = await dictation.start(current: draft, update: { draft = $0 }) {
+                        coordinator.notice = message
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: dictation.isListening ? "mic.fill" : "mic")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(dictation.isListening ? theme.accent : Color.primary)
+                .symbolEffect(.pulse, isActive: dictation.isListening)
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(dictation.isListening ? "Terminer la dictée" : "Dicter")
+        .accessibilityHint(dictation.isListening ? "" : "Écrit ce que vous dites dans la barre, sans l'envoyer.")
     }
 
     /// AVE parle dans la conversation écrite (lecture à voix haute ou réponse dite).
@@ -418,6 +445,7 @@ public struct ChatView: View {
     }
 
     private func send() {
+        dictation.cancel()
         let message = draft
         draft = ""
         sentCount += 1
@@ -530,6 +558,7 @@ public struct ChatView: View {
     // MARK: Mode vocal
 
     private func openVoiceMode() {
+        dictation.cancel()
         composerFocused = false
         Task { await coordinator.setMode(.voice) }
     }

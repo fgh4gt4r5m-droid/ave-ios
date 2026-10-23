@@ -5,7 +5,8 @@ import Foundation
 /// redemande alors l'accord à chacun. Ce qui est dit ici décrit ce que l'app et ses services font réellement à cette date.
 public enum Terms {
     /// Version acceptée, gardée par le service de comptes (`terms_version`) et sur l'iPhone.
-    public static let currentVersion = "2026-10-v1"
+    /// v2 (2026-10-23) : la dictée par la reconnaissance vocale d'Apple, sur l'iPhone.
+    public static let currentVersion = "2026-10-v2"
     public static let minimumAge = 18
 
     public static let draftNotice = "Brouillon : ce texte sera relu par un juriste avant la publication d'AVE."
@@ -45,6 +46,9 @@ public enum Terms {
 
     ## Vos conversations
     L'historique de vos conversations reste sur votre iPhone. Vous pouvez l'effacer à tout moment, ou ne plus le garder. Le serveur d'AVE ne garde pas vos conversations après la fin de la session.
+
+    ## La dictée
+    Le micro de la barre de saisie utilise la reconnaissance vocale d'Apple, sur votre iPhone : le son ne quitte pas l'appareil et n'est pas gardé. Le texte dicté n'est envoyé à AVE que si vous touchez Envoyer.
 
     ## Vos fichiers
     Les photos et documents que vous joignez, et les contenus produits, sont effacés des serveurs d'AVE au bout d'une heure. Ils ne servent jamais à entraîner l'IA. Une image que vous signalez est conservée le temps de son examen.
