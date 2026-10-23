@@ -21,12 +21,8 @@ struct VoiceModeView: View {
         NavigationStack {
             VStack(spacing: 24) {
                 Spacer(minLength: 8)
-                FloatingVoiceOrbView(
-                    state: state,
-                    level: state == .speaking ? coordinator.playbackLevel : coordinator.micLevel,
-                    diameter: captions ? 130 : 170,
-                    onTap: { Task { await coordinator.interruptAssistant() } })
-                .opacity(coordinator.micMuted ? 0.45 : 1)
+                voiceMark
+                    .opacity(coordinator.micMuted ? 0.45 : 1)
                 if captions {
                     liveCaptions
                 } else {
@@ -58,6 +54,37 @@ struct VoiceModeView: View {
         .sheet(isPresented: $showLanguages) {
             LanguagePicker(selection: $language, options: coordinator.languageOptions)
                 .presentationDetents([.medium, .large])
+        }
+    }
+
+    /// Le logo vivant remplace l'orbe : au repos l'Afrique en barres ; en écoute un cercle, en réflexion une onde, en
+    /// parole une bulle, et les barres suivent le son réel (micro ou voix d'AVE). Toucher pendant que l'assistant parle
+    /// l'interrompt, comme l'orbe. L'état est dit par le texte et par VoiceOver, jamais par le seul dessin.
+    private var voiceMark: some View {
+        Button { Task { await coordinator.interruptAssistant() } } label: {
+            AVELiveMark(phase: AVEMarkPhase(orb: state),
+                        level: state == .speaking ? coordinator.playbackLevel : coordinator.micLevel)
+                .frame(width: captions ? 200 : 260, height: captions ? 200 : 260)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(!state.isInteractive)
+        .opacity(state == .unavailable ? 0.35 : 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Assistant vocal")
+        .accessibilityValue(state.label)
+        .accessibilityHint(state.hint)
+        .accessibilityAddTraits(state.isInteractive ? .isButton : [])
+        .accessibilityAction {
+            // L'élément regroupé ne transmet pas toujours le toucher double au bouton : on le rend explicite.
+            guard state.isInteractive else { return }
+            Task { await coordinator.interruptAssistant() }
+        }
+        .onChange(of: state) { _, new in
+            // Annonce les changements utiles ; la parole de l'assistant s'entend déjà.
+            if new == .listening || new == .thinking || new == .unavailable {
+                AccessibilityNotification.Announcement(new.label).post()
+            }
         }
     }
 

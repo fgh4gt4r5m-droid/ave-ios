@@ -50,7 +50,8 @@ public struct OnboardingView: View {
     private var welcome: some View {
         VStack(spacing: 26) {
             Spacer()
-            AVEMark().frame(width: 132, height: 132)
+            // Naissance du logo (cercle → Afrique), puis repos : l'Afrique dessinée par les barres.
+            AVELiveMark(phase: .idle, entrance: true).frame(width: 170, height: 170)
             VStack(spacing: 12) {
                 Text("Votre assistant, dans votre langue.")
                     .font(.largeTitle.weight(.bold))
@@ -104,29 +105,6 @@ public struct OnboardingView: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityHint(option.isAvailable ? "" : "Pas encore disponible : l'assistant ne pourra pas répondre.")
-    }
-}
-
-/// Marque provisoire : sept barres de son, la centrale en ambre (comme l'icône provisoire de l'app).
-struct AVEMark: View {
-    private let heights: [CGFloat] = [0.16, 0.30, 0.46, 0.62, 0.46, 0.30, 0.16]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = min(proxy.size.width, proxy.size.height)
-            ZStack {
-                RoundedRectangle(cornerRadius: size * 0.23).fill(Color(AVEPalette.navy))
-                HStack(spacing: size * 0.052) {
-                    ForEach(heights.indices, id: \.self) { index in
-                        Capsule()
-                            .fill(Color(index == 3 ? AVEPalette.amber : AVEPalette.blue))
-                            .frame(width: size * 0.072, height: size * heights[index])
-                    }
-                }
-            }
-            .frame(width: size, height: size)
-        }
-        .accessibilityLabel("AVE")
     }
 }
 #endif

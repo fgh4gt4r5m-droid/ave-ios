@@ -54,12 +54,12 @@ struct RootView: View {
                 signedIn(coordinator: coordinator, session: session, kind: kind)
             } else if case .signedIn = authState {
                 // Connecté mais sans session (conversation en cours de création) : jamais l'écran de connexion.
-                ProgressView()
+                loadingMark
             } else if let signIn {
                 SignInView(model: signIn)
                     .safeAreaInset(edge: .top) { if usingDevAccounts { devAccountsBanner } }
             } else {
-                ProgressView()
+                loadingMark
             }
         }
         .task { await bootstrap() }
@@ -205,6 +205,16 @@ struct RootView: View {
     }
 
     // MARK: Démarrage
+
+    /// Pendant le démarrage : la naissance du logo (cercle → Afrique), puis son repos. Aucune attente ajoutée : l'écran
+    /// suivant s'affiche dès qu'il est prêt (le HIG déconseille d'allonger un lancement pour montrer un logo).
+    private var loadingMark: some View {
+        AVELiveMark(phase: .idle, entrance: true)
+            .frame(width: 150, height: 150)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Chargement")
+    }
 
     /// Honnêteté envers les testeurs : rien n'est réellement vérifié et aucun SMS ne part.
     private var devAccountsBanner: some View {

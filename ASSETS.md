@@ -15,7 +15,8 @@ raster de 1254 px, probablement générées par IA : elles ne sont **pas** dans 
 **Icône actuelle (2026-10-23)** : générée par le propriétaire à partir des prompts fournis (carte de l'Afrique en volutes,
 barres de son, barre centrale ambre) : `AppIcon-1024.png` (clair, fond bleu nuit), `AppIcon-Dark-1024.png` (sombre, fond
 noir) et `AppIcon-Tinted-1024.png` (teintée, niveaux de gris), 1024 px opaques, vérifiées lisibles à 60 et 29 px.
-`AVELogo` : le même logo DÉTOURÉ (fond transparent, tiré de la version sombre) pour l'écran de lancement et les animations.
+`AVELogo` : le même logo DÉTOURÉ (fond transparent, tiré de la version sombre), en réserve. Les animations n'utilisent pas
+cette image : le logo vivant est redessiné en vecteur (`AVEMarkGeometry`, voir `ECRANS.md`).
 Images générées par IA : recherche d'antériorité sur le logo à faire avant le lancement public ; vectorisation à prévoir.
 
 ## Palette (relevée sur le logo, approximative)

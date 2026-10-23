@@ -25,7 +25,17 @@
 - `Features/Chat` : `ChatTranscript` (pur, testé), `ChatView` (conversation + barre de saisie Liquid Glass, comme ChatGPT/Claude),
   `MessageBubble` (la personne en bulle, l'assistant en texte libre), cartes d'action, `NoticeBanner`.
 - `Features/VoiceAssistant/VoiceModeView` : mode vocal plein écran ouvert depuis la barre de saisie, même session.
-  `FloatingVoiceOrbView` + `OrbState` (pur, testé ; `caption` = légende visible, `hint` = aide VoiceOver).
+  Le logo vivant y remplace l'orbe (toucher pendant la parole = interrompre, mêmes annonces VoiceOver). `OrbState` (pur,
+  testé ; `caption` = légende visible, `hint` = aide VoiceOver). `FloatingVoiceOrbView` reste dans AVEKit pour les apps hôtes.
+- **Logo vivant (maquettes validées le 2026-10-23)** : `Features/Shared/AVEMarkGeometry` (pur, testé) + `AVELiveMark`
+  (`Canvas` + `TimelineView`, dessin vectoriel). Au REPOS, l'Afrique dessinée par 27 barres (+ Madagascar), qui respire :
+  https://claude.ai/artifact/4tgbWQXgUiZav1sdrhDv4y. Tout le reste suit la première maquette
+  (https://claude.ai/artifact/PWGH34u8DZuF78FJWJBmnt) : l'Afrique en contour devient cercle (écoute), onde puis cercle
+  (réflexion, en boucle), bulle (parole), et les sept barres suivent le son réel ; naissance = cercle → Afrique, barres
+  qui montent. Repos ↔ contour : fondu de 0,45 s. Où : chargement au démarrage et bienvenue (naissance puis repos),
+  accueil d'une conversation vide (repos), « Réflexion… » sous la question, mode vocal. « Réduire les animations » :
+  l'Afrique en barres, fixe. L'icône de l'app ne change pas. Le tracé est un relevé simplifié du logo : un designer
+  peut affiner les points de `africaTrace` sans toucher aux animations.
 - Avis « Version d'essai » : `SessionCoordinator.Configuration.demoNotice`, activé par `AVE_DEMO_ENGINE` (xcconfig) tant que le
   moteur répond par écho avec une voix de test.
 - La vue n'arrête jamais la session (`onDisappear` est aussi appelé quand le mode vocal la recouvre) : le propriétaire du

@@ -157,7 +157,11 @@ public struct ChatView: View {
                     ForEach(coordinator.pendingTexts) { pending in
                         PendingBubble(text: pending.text)
                     }
+                    if showsThinking {
+                        ThinkingRow().transition(.opacity)
+                    }
                 }
+                .animation(.easeInOut(duration: 0.2), value: showsThinking)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
@@ -173,9 +177,19 @@ public struct ChatView: View {
         }
     }
 
-    /// Accueil : salutation et quatre suggestions juste au-dessus de la barre (comme ChatGPT et Gemini).
+    /// « Réflexion… » sous la question, tant que la réponse n'a pas commencé à s'écrire (ensuite, la réponse qui
+    /// arrive suffit).
+    private var showsThinking: Bool {
+        guard coordinator.orbState == .thinking else { return false }
+        if let last = coordinator.transcript.messages.last, last.role == .assistant, last.status == .streaming { return false }
+        return true
+    }
+
+    /// Accueil : le logo au repos (l'Afrique dessinée par les barres), la salutation et quatre suggestions juste
+    /// au-dessus de la barre (comme ChatGPT et Gemini).
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 20) {
+            AVELiveMark(phase: .idle).frame(width: 96, height: 96)
             VStack(alignment: .leading, spacing: 2) {
                 Text(firstName.map { "Bonjour \($0)." } ?? "Bonjour.")
                 Text("Que faisons-nous ?").foregroundStyle(.secondary)
@@ -350,6 +364,21 @@ struct Suggestion: Identifiable {
                    prefix: "Explique-moi simplement : "),
         Suggestion(id: "parler", symbol: "waveform", title: "Parler", detail: "à voix haute avec AVE", prefix: nil),
     ]
+}
+
+/// L'assistant prépare sa réponse : le logo en réflexion (l'Afrique devient une onde, puis un cercle) et le mot qui le dit.
+struct ThinkingRow: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            AVELiveMark(phase: .thinking).frame(width: 36, height: 36)
+            Text("Réflexion…")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(OrbState.thinking.label)
+    }
 }
 
 /// Message écrit hors connexion : même bulle que les autres, avec la mention « en attente du réseau ».
