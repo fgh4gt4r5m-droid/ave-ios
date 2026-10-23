@@ -29,6 +29,7 @@
 	<key>AVEDefaultCountryCode</key><string>$(AVE_DEFAULT_COUNTRY_CODE)</string>
 	<key>AVEDemoEngine</key><string>$(AVE_DEMO_ENGINE)</string>
 	<key>AVEDemoAccounts</key><string>$(AVE_DEMO_ACCOUNTS)</string>
+	<key>AVEDemoOffline</key><string>$(AVE_DEMO_OFFLINE)</string>
 	<key>ITSAppUsesNonExemptEncryption</key><false/>
 </dict>
 </plist>

@@ -95,9 +95,10 @@ workflows:
     name: "AVE - TestFlight démo interface (manuel)"
     instance_type: mac_mini_m2
     max_build_duration: 60
-    # Build à TOUCHER avant que les serveurs existent : faux service de comptes (code 000000, annoncé à l'écran), moteur
-    # injoignable (l'assistant ne répond pas). Export réservé aux testeurs internes : ne peut pas partir sur l'App Store.
-    # Prérequis : les mêmes que ave-testflight SAUF le groupe « ave » (aucune adresse nécessaire).
+    # Build à TOUCHER avant que le moteur soit en ligne (2026-10-23) : moteur de démo HORS LIGNE sur l'iPhone (annoncé à
+    # l'écran) et VRAI service de comptes sur Render (préproduction) s'il répond ; sinon faux service (code 000000, annoncé
+    # à l'écran). Le journal du build dit lequel. Export réservé aux testeurs internes : ne peut pas partir sur l'App Store.
+    # Prérequis : les mêmes que ave-testflight SAUF le groupe « ave ».
     integrations:
       app_store_connect: TAM_ASC_KEY   # clé API de l'équipe (même nom dans chaque compte Codemagic)
     environment:
@@ -105,6 +106,9 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.tam.ave   # profils com.tam.ave et com.tam.ave.liveactivity
+      vars:
+        # Adresse du service de comptes sur Render (préproduction). Si Render en affiche une autre, la changer ici.
+        AVE_RENDER_ACCOUNTS_URL: https://ave-accounts.onrender.com
     scripts:
       - name: "Installer XcodeGen et générer le projet"
         script: |
@@ -118,8 +122,16 @@ workflows:
           set -o pipefail
           BUILD_ID=$(date -u +%y%m%d%H%M)
           echo "Numéro de build : $BUILD_ID"
-          # AVE_DEMO_ACCOUNTS=YES : faux service de comptes ; AVE_ACCOUNTS_URL vide : aucune adresse de comptes.
-          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_DEMO_ACCOUNTS=YES AVE_ACCOUNTS_URL=             CURRENT_PROJECT_VERSION="$BUILD_ID" archive 2>&1 | tee archive.log | tail -n 40
+          # Vrai service de comptes s'il répond (/healthz), sinon faux service (code 000000, annoncé dans l'app).
+          if curl -fsS -m 30 "$AVE_RENDER_ACCOUNTS_URL/healthz" > /dev/null; then
+            echo "Service de comptes en ligne : $AVE_RENDER_ACCOUNTS_URL (vrais codes par SMS ou WhatsApp)"
+            DEMO_ACCOUNTS=NO; ACCOUNTS_URL="$AVE_RENDER_ACCOUNTS_URL"
+          else
+            echo "Service de comptes injoignable : build avec le FAUX service (code 000000)"
+            DEMO_ACCOUNTS=YES; ACCOUNTS_URL=""
+          fi
+          # AVE_DEMO_OFFLINE=YES : moteur de démo hors ligne sur l'iPhone (le vrai moteur n'est pas encore en ligne).
+          xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Release             -destination 'generic/platform=iOS' -archivePath build/AVE.xcarchive             AVE_DEMO_OFFLINE=YES AVE_DEMO_ACCOUNTS="$DEMO_ACCOUNTS" AVE_ACCOUNTS_URL="$ACCOUNTS_URL"             CURRENT_PROJECT_VERSION="$BUILD_ID" archive 2>&1 | tee archive.log | tail -n 40
           xcodebuild -exportArchive -archivePath build/AVE.xcarchive -exportPath build/ipa             -exportOptionsPlist "$HOME/export_options.plist"
     artifacts:
       - build/ipa/*.ipa

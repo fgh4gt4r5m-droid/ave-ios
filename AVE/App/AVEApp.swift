@@ -274,12 +274,21 @@ struct RootView: View {
 
     private func buildCoordinator(env: AppEnvironment, auth: AuthSession, kind: AccountKind,
                                   transcript: ChatTranscript) throws {
+        // Démo hors ligne : le moteur de démonstration ne demande aucun jeton (le service de comptes n'en délivre pas
+        // sans moteur) ; la connexion au compte, elle, reste réelle.
+        let tokenProvider: AVETokenProvider = env.demoOffline ? { nil } : auth.tokenProvider()
         let configuration = AVEConfiguration(
             endpoint: env.endpoint, defaultLanguage: language.language,
-            tokenProvider: auth.tokenProvider(), logger: .system, clientInfo: env.clientInfo)
-        let client = configuration.makeClient(language: language.language)
+            tokenProvider: tokenProvider, logger: .system, clientInfo: env.clientInfo)
+        let client = env.demoOffline
+            ? configuration.makeClient(language: language.language, transportFactory: DemoEngineTransport.factory)
+            : configuration.makeClient(language: language.language)
         var sessionConfiguration = SessionCoordinator.Configuration()
-        sessionConfiguration.demoNotice = env.demoEngine ? UserMessages.demoEngine : nil
+        if env.demoOffline {
+            sessionConfiguration.demoNotice = UserMessages.demoOffline
+        } else {
+            sessionConfiguration.demoNotice = env.demoEngine ? UserMessages.demoEngine : nil
+        }
         // La conversation s'ouvre en mode texte, comme les assistants de référence ; le mode vocal est à un geste
         // (bouton de la barre de saisie, suggestion « Parler », raccourci Siri). Le micro n'est demandé qu'à ce moment-là.
         let new = SessionCoordinator(client: client, devices: try .system(), mode: .text,

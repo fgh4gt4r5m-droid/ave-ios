@@ -66,4 +66,6 @@ public enum UserMessages {
     public static let offlineQueued = "Hors connexion. Vos messages partiront au retour du réseau."
     /// État réel du moteur au 2026-10-23 (dialogue en écho, voix de test). Affiché seulement si l'app l'active.
     public static let demoEngine = "Version d'essai : l'assistant répète ce que vous dites et sa voix est un son de test."
+    /// Build de démo sans moteur en ligne : les réponses viennent de l'iPhone (`DemoEngineTransport`).
+    public static let demoOffline = "Démo hors ligne : aucun moteur connecté. Les réponses viennent de l'iPhone, avec un son de test."
 }

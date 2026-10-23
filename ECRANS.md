@@ -39,6 +39,12 @@
   peut affiner les points de `africaTrace` sans toucher aux animations.
 - Avis « Version d'essai » : `SessionCoordinator.Configuration.demoNotice`, activé par `AVE_DEMO_ENGINE` (xcconfig) tant que le
   moteur répond par écho avec une voix de test.
+- **Démo hors ligne (2026-10-23)** : `AVE_DEMO_OFFLINE=YES`, seulement dans le workflow `ave-testflight-demo`. Le client parle
+  à `Kit/DemoEngineTransport` (faux serveur sur l'iPhone, VRAI protocole : ready, transcript, reply_text, voix de test,
+  tts_end, turn_end, interrupt, speak, ping) au lieu du moteur, sans jeton. Il fait ce que le moteur fait aujourd'hui
+  (écho annoncé « Démo hors ligne », son de test) et ne reconnaît pas la parole (un message vocal est dit tel quel). Avis
+  permanent sous la barre de saisie (`UserMessages.demoOffline`). La connexion au compte reste RÉELLE si le service de
+  comptes répond sur Render (préproduction) ; sinon faux service (code 000000). Jamais dans `ave-testflight`.
 - La vue n'arrête jamais la session (`onDisappear` est aussi appelé quand le mode vocal la recouvre) : le propriétaire du
   coordinateur appelle `stop()`.
 - `Features/Shared` : `LanguageCatalog`/`LanguagePicker`, `UserMessages`, `AVETheme` (charte remplaçable par WoYo/TaGa).

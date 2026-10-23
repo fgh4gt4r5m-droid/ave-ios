@@ -15,6 +15,9 @@ struct AppEnvironment {
     let demoEngine: Bool
     /// Build TestFlight « démo interface » : faux service de comptes (`AVE_DEMO_ACCOUNTS`), annoncé à l'écran.
     let demoAccounts: Bool
+    /// Build de démo : moteur de démonstration HORS LIGNE sur l'iPhone (`AVE_DEMO_OFFLINE`), annoncé à l'écran, tant que le
+    /// vrai moteur n'est pas en ligne. Jamais dans le build de production.
+    let demoOffline: Bool
 
     static func load(bundle: Bundle = .main) throws -> AppEnvironment {
         guard let raw = bundle.object(forInfoDictionaryKey: "AVEEndpoint") as? String,
@@ -27,10 +30,12 @@ struct AppEnvironment {
         let demo = (bundle.object(forInfoDictionaryKey: "AVEDemoEngine") as? String) != "NO"
         // Absent = faux : le faux service de comptes n'est jamais choisi par défaut.
         let demoAccounts = (bundle.object(forInfoDictionaryKey: "AVEDemoAccounts") as? String) == "YES"
+        // Absent = faux, comme le faux service de comptes.
+        let demoOffline = (bundle.object(forInfoDictionaryKey: "AVEDemoOffline") as? String) == "YES"
         return AppEnvironment(
             endpoint: try AVEEndpoint(url, allowInsecureLocalNetwork: allowLocal),
             clientInfo: ClientInfo(app: "ave-ios", version: version, sdk: "avekit"),
             accountsURL: accounts, allowInsecureLocal: allowLocal, defaultCountryCode: country, demoEngine: demo,
-            demoAccounts: demoAccounts)
+            demoAccounts: demoAccounts, demoOffline: demoOffline)
     }
 }
