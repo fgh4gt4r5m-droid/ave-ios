@@ -28,8 +28,9 @@
   Le logo vivant y remplace l'orbe (toucher pendant la parole = interrompre, mêmes annonces VoiceOver). `OrbState` (pur,
   testé ; `caption` = légende visible, `hint` = aide VoiceOver). `FloatingVoiceOrbView` reste dans AVEKit pour les apps hôtes.
 - **Logo vivant (maquettes validées le 2026-10-23)** : `Features/Shared/AVEMarkGeometry` (pur, testé) + `AVELiveMark`
-  (`Canvas` + `TimelineView`, dessin vectoriel). Au REPOS, l'Afrique dessinée par 27 barres (+ Madagascar), qui respire :
-  https://claude.ai/artifact/4tgbWQXgUiZav1sdrhDv4y. Tout le reste suit la première maquette
+  (`Canvas` + `TimelineView`, dessin vectoriel). Au REPOS, l'Afrique dessinée par les barres, recalée
+  sur les fichiers du propriétaire (19 barres, 2 barres ambre devant, ligne d'onde qui découpe les barres, Madagascar en
+  3 barres ; mesures gardées en pixels du fichier 1254 px), qui respire : https://claude.ai/artifact/4k9RuD9VduaUH72cAyQE8a. Tout le reste suit la première maquette
   (https://claude.ai/artifact/PWGH34u8DZuF78FJWJBmnt) : l'Afrique en contour devient cercle (écoute), onde puis cercle
   (réflexion, en boucle), bulle (parole), et les sept barres suivent le son réel ; naissance = cercle → Afrique, barres
   qui montent. Repos ↔ contour : fondu de 0,45 s. Où : chargement au démarrage et bienvenue (naissance puis repos),

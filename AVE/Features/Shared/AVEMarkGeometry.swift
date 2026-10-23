@@ -2,7 +2,8 @@ import CoreGraphics
 import Foundation
 
 /// Ce que montre le logo vivant (maquettes validées par le propriétaire le 2026-10-23).
-/// - `idle` (repos, l'assistant attend un message) : l'Afrique DESSINÉE PAR LES BARRES, qui respire.
+/// - `idle` (repos, l'assistant attend un message) : l'Afrique DESSINÉE PAR LES BARRES, traversée par une ligne d'onde,
+///   qui respire (dessin recalé sur les fichiers du propriétaire).
 /// - les autres : l'Afrique en contour qui se transforme (cercle, onde, bulle) pendant que les sept barres pulsent.
 public enum AVEMarkPhase: Sendable, Equatable {
     /// Naissance : un cercle devient l'Afrique, les barres montent une à une, puis le logo passe au repos.
@@ -82,26 +83,66 @@ public enum AVEMarkGeometry {
     }
 
     public struct RestingBar: Sendable, Equatable {
+        public enum Style: Sendable, Equatable {
+            /// Barre du continent (dégradé magenta → cyan).
+            case continent
+            /// Barre ambre posée DEVANT la barre du continent de même abscisse.
+            case amber
+            /// Madagascar, trois petites barres à part.
+            case madagascar
+        }
+
         public let x: CGFloat
         public let span: Span
-        public let isAmber: Bool
+        public let style: Style
     }
 
-    public static let restingBarWidth: CGFloat = 2.1
-    static let restingBarCount = 27
+    /// Relevé sur les fichiers du propriétaire (repos, 1254 × 1254 px, validé le 2026-10-23) : on garde les mesures en
+    /// pixels pour pouvoir les recontrôler sur l'image, et on les ramène au repère 0…100 (pixel 260 → 0, 7,4 px par unité).
+    static func artwork(_ pixel: CGFloat, origin: CGFloat) -> CGFloat { (pixel - origin) / 7.4 }
+    static func artworkX(_ pixel: CGFloat) -> CGFloat { artwork(pixel, origin: 260) }
+    static func artworkY(_ pixel: CGFloat) -> CGFloat { artwork(pixel, origin: 250) }
 
-    /// Chaque barre va du haut au bas du continent dans sa colonne ; les deux barres du milieu sont ambre, comme la
-    /// barre centrale du logo.
-    public static let restingBars: [RestingBar] = (0..<restingBarCount).compactMap { index in
-        let x = 7.5 + (90 - 7.5) * CGFloat(index) / CGFloat(restingBarCount - 1)
-        guard let extent = verticalExtent(of: africaTrace, at: x) else { return nil }
-        // Petit retrait : l'arrondi de la barre ne dépasse pas la silhouette.
-        return RestingBar(x: x, span: Span(top: extent.top + 1.2, bottom: extent.bottom - 1.2), isAmber: x > 43 && x < 50)
-    }
+    /// Largeur d'une barre (25 px), épaisseur de la ligne d'onde (22 px), largeur de sa découpe (40 px) et du liseré
+    /// autour des barres ambre (6 px).
+    public static let restingBarWidth: CGFloat = 25 / 7.4
+    public static let waveWidth: CGFloat = 22 / 7.4
+    public static let waveCutWidth: CGFloat = 40 / 7.4
+    public static let amberEdge: CGFloat = 6 / 7.4
 
-    /// Madagascar : une petite barre à part. Elle aide beaucoup à reconnaître le continent.
-    public static let madagascarX: CGFloat = 82
-    public static let madagascar = Span(top: 68, bottom: 81)
+    /// Ordre de dessin : continent, Madagascar, puis les barres ambre (devant).
+    public static let restingBars: [RestingBar] = {
+        // [x du centre, haut, bas] en pixels.
+        let continent: [[CGFloat]] = [
+            [281, 534, 583], [322, 508, 610], [363, 444, 600], [402, 403, 545], [440, 358, 505], [479, 326, 505],
+            [517, 311, 500], [556, 295, 783], [595, 333, 863], [634, 372, 945], [674, 358, 916], [714, 394, 827],
+            [751, 456, 733], [787, 506, 678], [823, 545, 600], [857, 555, 582], [907, 526, 630], [944, 545, 609],
+            [981, 561, 591],
+        ]
+        let madagascar: [[CGFloat]] = [[773, 815, 908], [810, 771, 863], [846, 736, 818]]
+        let amber: [[CGFloat]] = [[556, 420, 730], [595, 480, 730]]
+        func bars(_ specs: [[CGFloat]], _ style: RestingBar.Style) -> [RestingBar] {
+            specs.map { spec in
+                RestingBar(x: AVEMarkGeometry.artworkX(spec[0]),
+                           span: Span(top: AVEMarkGeometry.artworkY(spec[1]), bottom: AVEMarkGeometry.artworkY(spec[2])),
+                           style: style)
+            }
+        }
+        return bars(continent, .continent) + bars(madagascar, .madagascar) + bars(amber, .amber)
+    }()
+
+    /// Ligne d'onde qui traverse les barres au repos, en deux tronçons : le « n » violet à gauche, puis la vague qui passe
+    /// de l'ambre au cyan et s'enroule vers Madagascar. Points de passage relevés en pixels.
+    public static let waveSegments: [[CGPoint]] = {
+        let pixels: [[[CGFloat]]] = [
+            [[352, 560], [360, 622], [385, 618], [415, 552], [443, 516], [474, 524], [494, 566], [503, 630], [505, 688]],
+            [[634, 636], [636, 582], [652, 548], [679, 537], [706, 555], [736, 597], [768, 618], [804, 612], [842, 588],
+             [868, 566], [884, 574], [866, 602], [828, 634], [796, 660], [778, 688]],
+        ]
+        return pixels.map { segment in
+            segment.map { CGPoint(x: AVEMarkGeometry.artworkX($0[0]), y: AVEMarkGeometry.artworkY($0[1])) }
+        }
+    }()
 
     // MARK: Image à un instant donné
 
@@ -173,11 +214,12 @@ public enum AVEMarkGeometry {
 
     // MARK: Outils
 
-    /// Respiration lente qui traverse les barres d'ouest en est (± 4 % de hauteur).
+    /// Respiration lente qui traverse les barres d'ouest en est (± 4 % de hauteur). Le décalage dépend de l'abscisse :
+    /// une barre ambre respire avec la barre qu'elle recouvre.
     static func breathing(time: Double) -> [Span] {
-        restingBars.enumerated().map { index, bar in
+        restingBars.map { bar in
             let center = (bar.span.top + bar.span.bottom) / 2
-            let half = (bar.span.bottom - bar.span.top) / 2 * CGFloat(1 + 0.04 * sin(time * 1.6 - Double(index) * 0.28))
+            let half = (bar.span.bottom - bar.span.top) / 2 * CGFloat(1 + 0.04 * sin(time * 1.6 - Double(bar.x) * 0.066))
             return Span(top: center - half, bottom: center + half)
         }
     }
@@ -236,20 +278,5 @@ public enum AVEMarkGeometry {
             let r = radius(angle)
             return CGPoint(x: 49 + r * cos(angle), y: 50 + r * sin(angle))
         }
-    }
-
-    /// Haut et bas du polygone le long de la verticale `x` (`nil` hors du polygone).
-    static func verticalExtent(of polygon: [CGPoint], at x: CGFloat) -> Span? {
-        var top = CGFloat.infinity
-        var bottom = -CGFloat.infinity
-        for index in polygon.indices {
-            let a = polygon[index]
-            let b = polygon[(index + 1) % polygon.count]
-            guard (a.x <= x && b.x > x) || (b.x <= x && a.x > x) else { continue }
-            let y = a.y + (x - a.x) / (b.x - a.x) * (b.y - a.y)
-            top = min(top, y)
-            bottom = max(bottom, y)
-        }
-        return top < bottom ? Span(top: top, bottom: bottom) : nil
     }
 }

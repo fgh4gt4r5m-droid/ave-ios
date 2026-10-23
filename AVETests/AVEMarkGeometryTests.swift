@@ -40,15 +40,36 @@ struct AVEMarkGeometryTests {
                                CGPoint(x: 10, y: 10), CGPoint(x: 5, y: 10), CGPoint(x: 0, y: 10), CGPoint(x: 0, y: 5)]))
     }
 
-    @Test("au repos, les barres dessinent l'Afrique ; les deux du milieu sont ambre")
+    @Test("au repos : 19 barres de continent, 3 pour Madagascar, 2 ambre devant leur barre")
     func restingBarsDrawAfrica() {
         let bars = AVEMarkGeometry.restingBars
-        #expect(bars.count == 27)
+        let continent = bars.filter { $0.style == .continent }
+        #expect(continent.count == 19)
+        #expect(bars.filter { $0.style == .madagascar }.count == 3)
+        let amber = bars.filter { $0.style == .amber }
+        #expect(amber.count == 2)
         #expect(bars.allSatisfy { $0.span.top < $0.span.bottom })
-        #expect(bars.filter(\.isAmber).count == 2)
+        // Chaque barre ambre recouvre une barre du continent de même abscisse, sans en dépasser.
+        for bar in amber {
+            let under = continent.first { abs($0.x - bar.x) < 0.01 }
+            #expect(under != nil)
+            #expect((under?.span.top ?? .infinity) <= bar.span.top && bar.span.bottom <= (under?.span.bottom ?? 0))
+        }
+        // Les barres ambre sont dessinées en dernier (devant).
+        #expect(bars.suffix(2).allSatisfy { $0.style == .amber })
         // L'Afrique est plus haute au centre (jusqu'au Cap) qu'à l'ouest et à la corne.
-        let tallest = bars.max { ($0.span.bottom - $0.span.top) < ($1.span.bottom - $1.span.top) }
+        let tallest = continent.max { ($0.span.bottom - $0.span.top) < ($1.span.bottom - $1.span.top) }
         #expect((tallest?.x ?? 0) > 35 && (tallest?.x ?? 100) < 60)
+    }
+
+    @Test("au repos, tout tient dans le cadre (marge de lueur comprise)")
+    func restingFitsTheFrame() {
+        let inside: (CGPoint) -> Bool = { $0.x >= -5 && $0.x <= 105 && $0.y >= -5 && $0.y <= 105 }
+        for bar in AVEMarkGeometry.restingBars {
+            #expect(inside(CGPoint(x: bar.x, y: bar.span.top)) && inside(CGPoint(x: bar.x, y: bar.span.bottom)))
+        }
+        #expect(AVEMarkGeometry.waveSegments.count == 2)
+        #expect(AVEMarkGeometry.waveSegments.allSatisfy { $0.count > 2 && $0.allSatisfy(inside) })
     }
 
     @Test("la barre ambre du contour est la plus haute")

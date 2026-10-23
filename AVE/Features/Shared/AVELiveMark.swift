@@ -76,7 +76,21 @@ enum AVEMarkPainter {
     static let outlineColors = [rgb(0x3FB6FF), rgb(0x4F6BFF), rgb(0xA855F7)]
     static let barColors = [rgb(0x45A8FF), rgb(0x8B5CF6)]
     static let amberColors = [rgb(0xFFD54A), rgb(0xFF9F1C)]
-    static let restingColors = [rgb(0xA855F7), rgb(0x4F6BFF), rgb(0x22D3EE)]
+    // Repos : relevées sur les fichiers du propriétaire.
+    static var restingStops: [Gradient.Stop] { [
+        .init(color: rgb(0xE11DF5), location: 0), .init(color: rgb(0x7C3AED), location: 0.35),
+        .init(color: rgb(0x3B5BFF), location: 0.55), .init(color: rgb(0x14B4FF), location: 0.8),
+        .init(color: rgb(0x00E5FF), location: 1),
+    ] }
+    static var waveStops: [Gradient.Stop] { [
+        .init(color: rgb(0xC026F5), location: 0), .init(color: rgb(0x8B3DF5), location: 0.3),
+        .init(color: rgb(0xFFB020), location: 0.5), .init(color: rgb(0xFFB020), location: 0.56),
+        .init(color: rgb(0x3FA9FF), location: 0.66), .init(color: rgb(0x00E5FF), location: 1),
+    ] }
+    static var amberStops: [Gradient.Stop] { [
+        .init(color: rgb(0xFFE08A), location: 0), .init(color: rgb(0xFFB020), location: 0.55),
+        .init(color: rgb(0xFF8A5B), location: 1),
+    ] }
 
     static func draw(_ frame: AVEMarkGeometry.Frame, in context: inout GraphicsContext, size: CGSize) {
         // Repère 0…100 + marge de 10 de chaque côté pour la lueur.
@@ -134,31 +148,67 @@ enum AVEMarkPainter {
         }
     }
 
+    /// Repos, recalé sur les fichiers du propriétaire : barres du continent et de Madagascar, deux barres ambre devant
+    /// (avec un liseré), puis la ligne d'onde qui DÉCOUPE les barres qu'elle croise. Liseré et découpe se font par
+    /// effacement (`destinationOut`) dans un calque à part : ils restent justes sur n'importe quel fond, clair ou sombre.
     private static func drawResting(_ frame: AVEMarkGeometry.Frame, in context: inout GraphicsContext, scale: CGFloat,
                                     place: (CGFloat, CGFloat) -> CGPoint) {
         let width = AVEMarkGeometry.restingBarWidth
-        let shading = GraphicsContext.Shading.linearGradient(Gradient(colors: restingColors),
-                                                             startPoint: place(5, 0), endPoint: place(95, 0))
+        // Les mesures sont en unités du logo ; le dégradé suit l'abscisse du continent (ouest magenta, est cyan).
+        let barShading = GraphicsContext.Shading.linearGradient(
+            Gradient(stops: restingStops), startPoint: place(AVEMarkGeometry.artworkX(270), 0),
+            endPoint: place(AVEMarkGeometry.artworkX(990), 0))
+        let waveShading = GraphicsContext.Shading.linearGradient(
+            Gradient(stops: waveStops), startPoint: place(AVEMarkGeometry.artworkX(270), 0),
+            endPoint: place(AVEMarkGeometry.artworkX(990), 0))
+        func capsule(x: CGFloat, span: AVEMarkGeometry.Span, margin: CGFloat = 0) -> Path {
+            let barWidth = width + 2 * margin
+            let height = max(span.bottom - span.top + 2 * margin, barWidth)
+            let topLeft = place(x - barWidth / 2, span.top - margin)
+            let rect = CGRect(x: topLeft.x, y: topLeft.y, width: barWidth * scale, height: height * scale)
+            return Path(roundedRect: rect, cornerRadius: barWidth * scale / 2)
+        }
         var bars = Path()
-        var amber = Path()
-        func capsule(x: CGFloat, span: AVEMarkGeometry.Span) -> Path {
-            let height = max(span.bottom - span.top, width)
-            let topLeft = place(x - width / 2, span.top)
-            let rect = CGRect(x: topLeft.x, y: topLeft.y, width: width * scale, height: height * scale)
-            return Path(roundedRect: rect, cornerRadius: width * scale / 2)
-        }
+        var amber: [Path] = []
+        var amberEdges: [Path] = []
         for (bar, span) in zip(AVEMarkGeometry.restingBars, frame.resting) {
-            if bar.isAmber { amber.addPath(capsule(x: bar.x, span: span)) } else { bars.addPath(capsule(x: bar.x, span: span)) }
+            switch bar.style {
+            case .continent, .madagascar:
+                bars.addPath(capsule(x: bar.x, span: span))
+            case .amber:
+                amber.append(capsule(x: bar.x, span: span))
+                amberEdges.append(capsule(x: bar.x, span: span, margin: AVEMarkGeometry.amberEdge))
+            }
         }
-        bars.addPath(capsule(x: AVEMarkGeometry.madagascarX, span: AVEMarkGeometry.madagascar))
+        let waves = AVEMarkGeometry.waveSegments.map { segment in openSmoothPath(segment.map { place($0.x, $0.y) }) }
+        let cutStyle = StrokeStyle(lineWidth: AVEMarkGeometry.waveCutWidth * scale, lineCap: .round, lineJoin: .round)
+        let waveStyle = StrokeStyle(lineWidth: AVEMarkGeometry.waveWidth * scale, lineCap: .round, lineJoin: .round)
+
+        func compose(_ layer: inout GraphicsContext) {
+            layer.fill(bars, with: barShading)
+            for (bar, edge) in zip(amber, amberEdges) {
+                layer.blendMode = .destinationOut
+                layer.fill(edge, with: .color(.black))
+                layer.blendMode = .normal
+                let box = bar.boundingRect
+                layer.fill(bar, with: .linearGradient(Gradient(stops: amberStops),
+                                                      startPoint: CGPoint(x: box.midX, y: box.minY),
+                                                      endPoint: CGPoint(x: box.midX, y: box.maxY)))
+            }
+            for wave in waves {
+                layer.blendMode = .destinationOut
+                layer.stroke(wave, with: .color(.black), style: cutStyle)
+                layer.blendMode = .normal
+                layer.stroke(wave, with: waveShading, style: waveStyle)
+            }
+        }
+        // Lueur : la même composition, floutée, sous la composition nette.
         context.drawLayer { glow in
-            glow.addFilter(.blur(radius: 1.1 * scale))
+            glow.addFilter(.blur(radius: 5 / 7.4 * scale))
             glow.opacity = 0.6
-            glow.fill(bars, with: shading)
+            compose(&glow)
         }
-        context.fill(bars, with: shading)
-        context.fill(amber, with: .linearGradient(Gradient(colors: amberColors),
-                                                  startPoint: place(0, 10), endPoint: place(0, 95)))
+        context.drawLayer { sharp in compose(&sharp) }
     }
 
     /// Courbe fermée passant par tous les points (Catmull-Rom converti en courbes de Bézier).
@@ -175,6 +225,22 @@ enum AVEMarkPainter {
                           control2: CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6))
         }
         path.closeSubpath()
+        return path
+    }
+
+    /// Courbe ouverte passant par tous les points (Catmull-Rom, extrémités répétées).
+    static func openSmoothPath(_ points: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = points.first, points.count > 1 else { return path }
+        path.move(to: first)
+        let last = points.count - 1
+        for index in 0..<last {
+            let p0 = points[max(index - 1, 0)], p1 = points[index]
+            let p2 = points[index + 1], p3 = points[min(index + 2, last)]
+            path.addCurve(to: p2,
+                          control1: CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6),
+                          control2: CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6))
+        }
         return path
     }
 
