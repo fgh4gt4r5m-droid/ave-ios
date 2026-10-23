@@ -14,7 +14,7 @@ Le code vit dans le package SwiftPM (`Package.swift`) ; le projet ne fait que l'
 
 ## Ce qui reste à faire pour TestFlight (workflow `ave-testflight`, manuel)
 - Identifiants d'app chez Apple : `fr.ave.app` et `fr.ave.app.liveactivity` (à adapter dans `project.yml` si vous préférez un autre préfixe), avec les capacités **Sign in with Apple** et **App Attest**.
-- Intégration **App Store Connect** dans Codemagic, nommée `AVE_ASC_KEY` (ou changer le nom dans `codemagic.yaml`), et signature automatique iOS.
+- Intégration **App Store Connect** dans Codemagic, nommée `TAM_ASC_KEY` (clé existante de l'équipe, partagée avec WoYo et Driver), et signature automatique iOS.
 - Groupe de variables `ave` avec `AVE_ENDPOINT` (`wss://…/v1/stream`) et `AVE_ACCOUNTS_URL` (`https://…`) : les valeurs de `Config/Release.xcconfig` sont des **placeholders** (`.example`).
 - Icône 1024 × 1024 px dans `AVE/App/Assets.xcassets/AppIcon.appiconset` (voir `ASSETS.md`).
 - Aucune clé ni jeton dans le dépôt ni dans les variables : l'app n'en contient pas.

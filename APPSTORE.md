@@ -8,7 +8,7 @@ conversation ni commité dans un dépôt.**
 Le programme Apple Developer, l'équipe et l'intégration Codemagic existent déjà : **pas de nouvelle inscription** (§1 sauté).
 - **AVE se publie dans la MÊME équipe** que WoYo et Driver (même nom de vendeur sur l'App Store).
 - **Clé API** : réutiliser la clé App Store Connect déjà déclarée dans Codemagic pour WoYo/Driver (accès App Manager
-  suffisant) ; `codemagic.yaml` doit porter **son nom exact** à la place de `AVE_ASC_KEY`.
+  suffisant) ; `codemagic.yaml` doit porter **son nom exact** : `TAM_ASC_KEY`.
 - **Certificat Apple Distribution** : réutiliser celui que Codemagic a déjà (Apple limite leur nombre par équipe ; en
   créer un nouveau sans besoin peut bloquer). Il signe aussi AVE : seuls les **profils** sont propres à AVE (§5, étape 2).
 - **Identifiant de bundle** : suivre le préfixe déjà utilisé par WoYo et Driver (même domaine inversé).
@@ -37,7 +37,7 @@ Le programme Apple Developer, l'équipe et l'intégration Codemagic existent dé
 1. App Store Connect → **Utilisateurs et accès → Intégrations → App Store Connect API → Clés d'équipe** → « + ».
 2. Nom : `Codemagic` ; accès : **App Manager**.
 3. Télécharger le fichier `.p8` (**une seule fois possible**), noter l'**Issuer ID** et le **Key ID**. Garder le `.p8` hors de tout dépôt.
-4. Codemagic → **Team settings → Integrations → Developer Portal → Manage keys** → ajouter la clé sous le nom **`AVE_ASC_KEY`**
+4. Codemagic → **Team settings → Integrations → Developer Portal → Manage keys** → ajouter la clé sous le nom **`TAM_ASC_KEY`** (clé existante de l'équipe, partagée avec WoYo et Driver)
    (c'est le nom attendu par `codemagic.yaml`).
 5. Codemagic → **Code signing identities → iOS certificates** → « Generate certificate » (type Apple Distribution) avec cette clé.
    Codemagic crée ensuite les profils de provisionnement à chaque build.
@@ -61,7 +61,7 @@ Le workflow Codemagic **`ave-testflight`** est prêt (signature, numéro de buil
 **réservé aux testeurs internes** (`testFlightInternalTestingOnly`) : pas de « Beta App Review », mais seuls les membres de
 votre équipe App Store Connect peuvent l'installer (100 au maximum).
 
-**Avant tout** : les §1 à §4 sont faits (programme payé, les DEUX identifiants créés, clé `AVE_ASC_KEY` dans Codemagic,
+**Avant tout** : les §1 à §4 sont faits (programme payé, les DEUX identifiants créés, clé `TAM_ASC_KEY` dans Codemagic,
 fiche de l'app créée). Si l'identifiant de bundle n'est pas `fr.ave.app`, me le dire d'abord : il est écrit dans
 `project.yml`, `codemagic.yaml` et le Keychain, et le service de comptes doit le connaître (audience Sign in with Apple).
 

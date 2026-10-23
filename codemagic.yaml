@@ -49,11 +49,11 @@ workflows:
     name: "AVE - TestFlight (manuel)"
     instance_type: mac_mini_m2
     max_build_duration: 60
-    # Prérequis (voir APPSTORE.md, § TestFlight) : clé API App Store Connect nommée AVE_ASC_KEY dans Codemagic, certificat
+    # Prérequis (voir APPSTORE.md, § TestFlight) : clé API App Store Connect de l'équipe (TAM_ASC_KEY) dans Codemagic, certificat
     # Apple Distribution et profils App Store des DEUX identifiants (app et extension) récupérés dans Codemagic, fiche de l'app
     # créée dans App Store Connect, groupe de variables « ave » (AVE_ENDPOINT, AVE_ACCOUNTS_URL).
     integrations:
-      app_store_connect: AVE_ASC_KEY
+      app_store_connect: TAM_ASC_KEY   # clé API de l'équipe (partagée avec WoYo et Driver)
     environment:
       groups:
         - ave                       # AVE_ENDPOINT (wss://…/v1/stream), AVE_ACCOUNTS_URL (https://…) : adresses réelles
