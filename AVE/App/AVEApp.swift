@@ -276,7 +276,13 @@ struct RootView: View {
                                   transcript: ChatTranscript) throws {
         // Démo hors ligne : le moteur de démonstration ne demande aucun jeton (le service de comptes n'en délivre pas
         // sans moteur) ; la connexion au compte, elle, reste réelle.
-        let tokenProvider: AVETokenProvider = env.demoOffline ? { nil } : auth.tokenProvider()
+        // `@Sendable` explicite : dans un « ? : », la fermeture n'hérite pas du type attendu et Swift 6 la refuse.
+        let tokenProvider: AVETokenProvider
+        if env.demoOffline {
+            tokenProvider = { @Sendable in nil }
+        } else {
+            tokenProvider = auth.tokenProvider()
+        }
         let configuration = AVEConfiguration(
             endpoint: env.endpoint, defaultLanguage: language.language,
             tokenProvider: tokenProvider, logger: .system, clientInfo: env.clientInfo)
