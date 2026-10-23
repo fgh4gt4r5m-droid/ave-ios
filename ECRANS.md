@@ -26,7 +26,7 @@
    la voix : l'app n'en fabrique pas. Hors ligne, le message n'est pas perdu en silence : l'utilisateur est prévenu. Envoyer du texte pendant que l'assistant
    parle purge la lecture localement (le serveur coupe seul).
 3. **Texte de la réponse** : bulle construite phrase par phrase par `utterance_id` (`reply_text`). Sans `reply_text`, bulle « Réponse vocale ».
-4. **Réécouter** : rejoue l'audio gardé en mémoire (4 Mo max, plus anciens évincés). `speak` existe côté client mais n'a pas d'écran.
+4. **Lire à voix haute** (2026-10-23) : rejoue l'audio gardé en mémoire (4 Mo max, plus anciens évincés) ; sinon le demande au moteur par `speak` (E7, ≤ 1000 caractères, synthèse seule). Cette lecture ne crée pas de bulle et son audio est gardé pour la fois suivante. Pas de bouton pour une réponse plus longue ou une carte d'action.
 5. **Langues** : liste du serveur (`ready.languages`, disponibilité réelle) ; repli codé en dur si absente. Les langues indisponibles sont sélectionnables
    mais signalées. Aucune promesse de latence.
 6. **`vad:"client"`** : voir `contrat/CONTRAT.md` §3 bis. **Un seul flux d'événements** côté client (état, ready, protocole, audio) : l'ordre est garanti.

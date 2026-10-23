@@ -87,6 +87,8 @@ public final class SessionCoordinator {
     @ObservationIgnored private var turnTimer: Task<Void, Never>?
     @ObservationIgnored private var utteranceChunks: [Data] = []
     @ObservationIgnored private var replayCache: [(id: Int, chunks: [Data], bytes: Int)] = []
+    /// Message dont la lecture à voix haute a été demandée au moteur (`speak`), jusqu'à son `turn_end`.
+    @ObservationIgnored private var speakingFor: Int?
 
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
                 configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil,
@@ -274,26 +276,61 @@ public final class SessionCoordinator {
 
     public func dismissNotice() { notice = nil }
 
-    /// Rejoue l'audio mis en cache d'une réponse (le serveur n'a pas de message `speak`, contrat E7).
+    /// Rejoue l'audio mis en cache d'une réponse.
     public func replay(messageID: Int) {
         guard phase == .idle || phase == .listening, replayingMessageID == nil,
               let entry = replayCache.first(where: { $0.id == messageID }) else { return }
         replayingMessageID = messageID
         for chunk in entry.chunks { devices.player.enqueue(chunk) }
         devices.player.endOfUtterance()
+        clearReplayWhenDrained(messageID)
+    }
+
+    public func hasCachedAudio(for messageID: Int) -> Bool {
+        replayCache.contains { $0.id == messageID }
+    }
+
+    /// Limite du moteur pour `speak` (E7, `docs/ALIGNEMENT-IOS.md`).
+    public static let speakMaxCharacters = 1000
+
+    /// Vrai si « Lire à voix haute » peut marcher : audio gardé, ou réponse écrite assez courte pour `speak`.
+    public func canReadAloud(messageID: Int) -> Bool {
+        if hasCachedAudio(for: messageID) { return true }
+        guard let message = transcript.message(messageID), message.role == .assistant, message.card == nil,
+              !message.isVoiceOnly else { return false }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !text.isEmpty && text.count <= Self.speakMaxCharacters
+    }
+
+    /// « Lire à voix haute » : rejoue l'audio gardé s'il existe, sinon le demande au moteur (`speak`, E7 : synthèse seule,
+    /// sans passer par le dialogue). La réponse du moteur ne crée PAS de nouvelle bulle ; son audio est gardé pour la fois
+    /// suivante.
+    public func readAloud(messageID: Int) async {
+        if hasCachedAudio(for: messageID) {
+            replay(messageID: messageID)
+            return
+        }
+        guard canReadAloud(messageID: messageID), phase == .idle || phase == .listening, replayingMessageID == nil,
+              speakingFor == nil, let message = transcript.message(messageID) else { return }
+        speakingFor = messageID
+        replayingMessageID = messageID
+        if !(await client.speak(message.text)) {
+            speakingFor = nil
+            replayingMessageID = nil
+            notice = UserMessages.notConnected
+        }
+    }
+
+    /// Attend la fin de la lecture locale (sondage court, borné à 2 minutes) avant de rendre le bouton.
+    private func clearReplayWhenDrained(_ messageID: Int) {
         Task { [weak self] in
-            // Attend la fin de la lecture (sondage court, borné à 2 minutes).
             for _ in 0..<1_200 {
                 try? await Task.sleep(for: .milliseconds(100))
                 guard let self, self.replayingMessageID == messageID else { return }
                 if self.devices.player.isDrained { break }
             }
-            self?.replayingMessageID = nil
+            if self?.replayingMessageID == messageID { self?.replayingMessageID = nil }
         }
-    }
-
-    public func hasCachedAudio(for messageID: Int) -> Bool {
-        replayCache.contains { $0.id == messageID }
     }
 
     // MARK: Micro
@@ -384,11 +421,12 @@ public final class SessionCoordinator {
         case .ttsStart:
             utteranceChunks = []
             await perform(machine.handle(.ttsStarted))
-            transcript.apply(event)
+            // Lecture à voix haute demandée (`speak`) : pas de nouvelle bulle, c'est la voix d'une réponse déjà affichée.
+            if speakingFor == nil { transcript.apply(event) }
         case .ttsEnd(_, let interrupted):
-            let id = transcript.currentAssistantID
+            let id = speakingFor ?? transcript.currentAssistantID
             await perform(machine.handle(.ttsEnded(interrupted: interrupted)))
-            transcript.apply(event)
+            if speakingFor == nil { transcript.apply(event) }
             if !interrupted {
                 devices.player.endOfUtterance()
                 if let id { cache(chunks: utteranceChunks, for: id) }
@@ -396,6 +434,12 @@ public final class SessionCoordinator {
             utteranceChunks = []
         case .turnEnd(_, let interrupted):
             await perform(machine.handle(.turnEnded(interrupted: interrupted)))
+            // Le moteur clôt toujours un `speak` par `turn_end` : fin de la lecture demandée, rien à ajouter au fil.
+            if let id = speakingFor {
+                speakingFor = nil
+                clearReplayWhenDrained(id)
+                return
+            }
             transcript.apply(event)
             if !interrupted { completedTurns += 1 }
         case .interrupted:

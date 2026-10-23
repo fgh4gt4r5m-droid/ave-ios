@@ -182,6 +182,46 @@ struct SessionCoordinatorTests {
         await h.coordinator.stop()
     }
 
+    @Test("lire à voix haute : speak au moteur, aucune nouvelle bulle, audio gardé ensuite")
+    func readAloud() async throws {
+        let h = try Harness()
+        let t = try await h.open()
+        await h.completeTurn(t)  // réponse écrite « Bonjour. », sans audio
+        let assistant = try #require(h.coordinator.transcript.messages.last)
+        #expect(assistant.role == .assistant && !h.coordinator.hasCachedAudio(for: assistant.id))
+        #expect(h.coordinator.canReadAloud(messageID: assistant.id))
+
+        await h.coordinator.readAloud(messageID: assistant.id)
+        #expect(await eventually { t.sentJSON.contains { $0["type"] as? String == "speak" && $0["text"] as? String == "Bonjour." } })
+        #expect(h.coordinator.replayingMessageID == assistant.id)
+
+        t.serverSend(#"{"type":"tts_start","seq":4,"utterance_id":6,"latency_ms":0,"sample_rate":16000}"#)
+        t.serverSend(audio: 5, Data([4, 2]))
+        t.serverSend(#"{"type":"tts_end","seq":6,"utterance_id":6,"interrupted":false}"#)
+        t.serverSend(#"{"type":"turn_end","seq":7,"utterance_id":6,"interrupted":false}"#)
+        #expect(await eventually { h.coordinator.hasCachedAudio(for: assistant.id) })
+        #expect(h.coordinator.transcript.messages.count == 2)      // pas de bulle « Réponse vocale » en plus
+        #expect(h.player.enqueued == [Data([4, 2])])
+        #expect(await eventually { h.coordinator.replayingMessageID == nil })
+        await h.coordinator.stop()
+    }
+
+    @Test("lire à voix haute : impossible pour une réponse trop longue pour speak ou une carte d'action")
+    func readAloudLimits() async throws {
+        let h = try Harness()
+        let t = try await h.open()
+        let long = String(repeating: "a", count: SessionCoordinator.speakMaxCharacters + 1)
+        t.serverSend(#"{"type":"transcript","seq":1,"text":"x","lang":"fra","confidence":1,"speculative":false,"source":"text"}"#)
+        t.serverSend(#"{"type":"reply_text","seq":2,"utterance_id":5,"text":"\#(long)","lang":"fra"}"#)
+        t.serverSend(#"{"type":"turn_end","seq":3,"utterance_id":5,"interrupted":false}"#)
+        #expect(await eventually { h.coordinator.transcript.messages.count >= 2 })
+        let assistant = try #require(h.coordinator.transcript.messages.last)
+        #expect(!h.coordinator.canReadAloud(messageID: assistant.id))
+        await h.coordinator.readAloud(messageID: assistant.id)
+        #expect(!t.sentJSON.contains { $0["type"] as? String == "speak" })
+        await h.coordinator.stop()
+    }
+
     @Test("turn_error language_unavailable : message honnête, retour au repos")
     func languageUnavailable() async throws {
         let h = try Harness()

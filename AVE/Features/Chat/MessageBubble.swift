@@ -6,7 +6,8 @@ import SwiftUI
 /// droite, l'assistant en texte libre pleine largeur (plus lisible pour les longues réponses), ses actions juste dessous.
 struct MessageBubble: View {
     let message: ChatMessage
-    let canReplay: Bool
+    /// « Lire à voix haute » possible (audio gardé, ou synthèse à la demande par le moteur).
+    let canReadAloud: Bool
     let isReplaying: Bool
     var canFeedback = false
     var feedbackSent = false
@@ -73,7 +74,7 @@ struct MessageBubble: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// Copier, réécouter, avis : icônes seules sous la réponse, comme ChatGPT et Claude, chacune avec un libellé
+    /// Copier, lire à voix haute, avis : icônes seules sous la réponse, comme ChatGPT et Claude, chacune avec un libellé
     /// VoiceOver et 44 pt de cible.
     @ViewBuilder private var actions: some View {
         HStack(spacing: 0) {
@@ -83,9 +84,9 @@ struct MessageBubble: View {
                     copied = true
                 }
             }
-            if canReplay {
+            if canReadAloud {
                 iconButton(isReplaying ? "speaker.wave.2.fill" : "speaker.wave.2",
-                           label: isReplaying ? "Lecture en cours" : "Réécouter", action: onReplay)
+                           label: isReplaying ? "Lecture en cours" : "Lire à voix haute", action: onReplay)
                     .disabled(isReplaying)
             }
             if canFeedback, message.utteranceID != nil {

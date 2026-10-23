@@ -117,7 +117,7 @@ public struct ChatView: View {
                     ForEach(coordinator.transcript.messages) { message in
                         MessageBubble(
                             message: message,
-                            canReplay: coordinator.hasCachedAudio(for: message.id),
+                            canReadAloud: coordinator.canReadAloud(messageID: message.id),
                             isReplaying: coordinator.replayingMessageID == message.id,
                             canFeedback: coordinator.canGiveFeedback,
                             feedbackSent: coordinator.feedbackGiven.contains(message.id),
@@ -125,7 +125,7 @@ public struct ChatView: View {
                                 if rating == .up { Task { await coordinator.sendFeedback(messageID: message.id, rating: .up) } }
                                 else { correctionTarget = message.id }
                             },
-                            onReplay: { coordinator.replay(messageID: message.id) },
+                            onReplay: { Task { await coordinator.readAloud(messageID: message.id) } },
                             onConfirm: { coordinator.confirmAction(messageID: message.id) },
                             onDecline: { coordinator.declineAction(messageID: message.id) })
                         .id(message.id)
