@@ -38,6 +38,8 @@ public struct ChatView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showFiles = false
     @State private var showCamera = false
+    /// Idées rangées par défaut : une pastille « Idées » ; un toucher les déploie (maquette validée le 2026-10-23).
+    @State private var ideasOpen = false
     @FocusState private var composerFocused: Bool
     @Environment(\.aveTheme) private var theme
 
@@ -190,7 +192,8 @@ public struct ChatView: View {
                                 onConfirm: { coordinator.confirmAction(messageID: message.id) },
                                 onDecline: { coordinator.declineAction(messageID: message.id) },
                                 onRetry: retryAction(for: message),
-                                onEdit: editAction(for: message))
+                                onEdit: editAction(for: message),
+                                showsMark: message.id == latestAnswerID)
                             .id(message.id)
                         }
                     }
@@ -205,7 +208,7 @@ public struct ChatView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
-            .overlay(alignment: .bottom) { if isEmpty { emptyState } }
+            .overlay { if isEmpty { emptyState } }
             .scrollDismissesKeyboard(.interactively)
             .defaultScrollAnchor(.bottom)
             .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
@@ -217,6 +220,11 @@ public struct ChatView: View {
         }
     }
 
+    /// Dernière réponse écrite de l'assistant : elle seule porte le symbole en tête.
+    private var latestAnswerID: Int? {
+        coordinator.transcript.messages.last { $0.role == .assistant && $0.card == nil && $0.media == nil && $0.task == nil }?.id
+    }
+
     /// « Réflexion… » sous la question, tant que la réponse n'a pas commencé à s'écrire (ensuite, la réponse qui
     /// arrive suffit).
     private var showsThinking: Bool {
@@ -225,49 +233,67 @@ public struct ChatView: View {
         return true
     }
 
-    /// Accueil : le logo au repos (l'Afrique dessinée par les barres), la salutation et quatre suggestions juste
-    /// au-dessus de la barre (comme ChatGPT et Gemini).
+    /// Accueil épuré (validé le 2026-10-23) : presque vide. Le symbole au repos, « Bonjour, Fatou », « Comment puis-je vous
+    /// aider ? ». Les idées sont rangées au-dessus de la saisie, sous le pouce.
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // 72 pt (et non 96) : six exemples doivent tenir au-dessus de la barre, même sur un iPhone SE.
-            AVELiveMark(phase: .idle).frame(width: 72, height: 72)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(firstName.map { "Bonjour \($0)." } ?? "Bonjour.")
-                Text("Que faisons-nous ?").foregroundStyle(.secondary)
-            }
-            .font(.title.weight(.bold))
-            .accessibilityElement(children: .combine)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(Suggestion.all) { suggestion in
-                    Button { use(suggestion) } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Image(systemName: suggestion.symbol)
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(theme.accent)
-                                .padding(.bottom, 2)
-                            Text(suggestion.title).font(.headline)
-                            Text(suggestion.detail).font(.subheadline).foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
-                        .padding(14)
-                        .background(theme.assistantBubble, in: .rect(cornerRadius: 18))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(suggestion.prefix == nil ? "Ouvre le mode vocal." : "Remplit la barre de saisie.")
-                }
-            }
+        VStack(spacing: 14) {
+            AVELiveMark(phase: .idle).frame(width: 64, height: 64)
+            Text(firstName.map { "Bonjour, \($0)" } ?? "Bonjour")
+                .font(.title.weight(.semibold))
+            Text("Comment puis-je vous aider ?")
+                .font(.body)
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 24)
+        .accessibilityElement(children: .combine)
+        .allowsHitTesting(false)
     }
 
-    private func use(_ suggestion: Suggestion) {
-        if let prefix = suggestion.prefix {
-            draft = prefix
+    /// Une pastille « Idées » ; touchée, une rangée compacte de boutons en verre défile sur le côté ; la croix la range.
+    /// Les idées se rangent seules dès qu'on écrit ou qu'on en choisit une.
+    private var ideasBar: some View {
+        HStack(spacing: 8) {
+            if ideasOpen {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(Idea.all.filter { coordinator.supportsMedia || !$0.needsMedia }) { idea in
+                            Button { use(idea) } label: {
+                                Label(idea.title, systemImage: idea.symbol).font(.subheadline)
+                            }
+                            .buttonStyle(.glass)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .scrollIndicators(.hidden)
+                .transition(.move(edge: .leading).combined(with: .opacity))
+                Button("Ranger les idées", systemImage: "xmark") { withAnimation(.snappy) { ideasOpen = false } }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+            } else {
+                Button { withAnimation(.snappy) { ideasOpen = true } } label: {
+                    Label("Idées", systemImage: "sparkles").font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.glass)
+                .accessibilityHint("Affiche des idées de questions.")
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(minHeight: 44)
+    }
+
+    private func use(_ idea: Idea) {
+        withAnimation(.snappy) { ideasOpen = false }
+        switch idea.action {
+        case .prefix(let text):
+            draft = text
             composerFocused = true
-        } else {
-            openVoiceMode()
+        case .createImage:
+            mediaSheet = .createImage
+        case .attachDocument:
+            showFiles = true
         }
     }
 
@@ -315,53 +341,63 @@ public struct ChatView: View {
 
     private var composer: some View {
         VStack(spacing: 6) {
-            VStack(spacing: 0) {
+            if isEmpty && draft.isEmpty { ideasBar }
+            // Saisie en deux étages (validée) : le texte, puis « + » à gauche et le bouton rond à droite.
+            VStack(alignment: .leading, spacing: 2) {
                 // Pièces jointes en cours d'envoi, dans la barre (maquette 2).
                 ForEach(coordinator.attachmentDrafts) { draft in
                     AttachmentDraftRow(draft: draft, url: draft.localName.flatMap { coordinator.mediaURL(named: $0) },
                                        onRemove: { coordinator.cancelAttachment(draft.id) })
                         .padding(.top, 6)
                 }
-                HStack(alignment: .bottom, spacing: 4) {
-                    if coordinator.supportsMedia {
-                        attachMenu
-                            .padding(.leading, 4)
-                            .padding(.bottom, 2)
-                    }
-                    if coordinator.supportsTextInput {
-                        TextField(isEmpty ? "Demandez ce que vous voulez" : "Message", text: $draft, axis: .vertical)
-                            .lineLimit(1...6)
-                            .focused($composerFocused)
-                            .padding(.leading, coordinator.supportsMedia ? 0 : 18)
-                            .padding(.vertical, 14)
-                    } else {
-                        Text(UserMessages.textInputUnavailable)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 18)
-                            .padding(.vertical, 14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    actionButton
-                        .padding(.trailing, 4)
-                        .padding(.bottom, 2)
+                if coordinator.supportsTextInput {
+                    TextField("Demandez à AVE", text: $draft, axis: .vertical)
+                        .lineLimit(1...6)
+                        .focused($composerFocused)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                } else {
+                    Text(UserMessages.textInputUnavailable)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                HStack(spacing: 4) {
+                    if coordinator.supportsMedia { attachMenu }
+                    Spacer(minLength: 0)
+                    actionButton
+                }
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
             }
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 26))
-            if let demo = coordinator.demoNotice {
-                Text(demo)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            // Écrans validés : un halo très léger autour de la saisie quand AVE lit une réponse à voix haute.
+            .background { ReadingHalo(active: readingAloud, level: coordinator.playbackLevel) }
+            .animation(.easeInOut(duration: 0.4), value: readingAloud)
+            // Deux petites lignes au plus : la mention d'essai (selon l'état du moteur), puis l'avertissement.
+            VStack(spacing: 2) {
+                if let demo = coordinator.demoNotice { Text(demo) }
+                Text("AVE peut se tromper. Vérifiez les informations importantes.")
             }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.15), value: canSend)
+        .onChange(of: draft) { _, new in if !new.isEmpty, ideasOpen { withAnimation(.snappy) { ideasOpen = false } } }
     }
 
-    /// Un seul bouton rond, dans la barre : « envoyer » dès qu'on écrit, « arrêter » pendant une réponse, sinon « mode
-    /// vocal ».
+    /// AVE parle dans la conversation écrite (lecture à voix haute ou réponse dite).
+    private var readingAloud: Bool {
+        coordinator.mode == .text && (coordinator.replayingMessageID != nil || coordinator.phase == .speaking)
+    }
+
+    /// Un seul bouton rond, dans la barre : « envoyer » (bleu AVE) dès qu'on écrit, « arrêter » pendant une réponse,
+    /// sinon « mode vocal ». Envoyer est le seul aplat de couleur de l'écran.
     private var actionButton: some View {
         let stops = !canSend && coordinator.isResponding
         return Button {
@@ -369,9 +405,9 @@ public struct ChatView: View {
         } label: {
             Image(systemName: canSend ? "arrow.up" : stops ? "stop.fill" : "waveform")
                 .font(.body.weight(.semibold))
-                .foregroundStyle(theme.onAccent)
-                .frame(width: 38, height: 38)
-                .background(theme.accent, in: .circle)
+                .foregroundStyle(canSend ? theme.onAccent : Color(.systemBackground))
+                .frame(width: 36, height: 36)
+                .background(canSend ? theme.accent : Color.primary, in: .circle)
                 .frame(width: 44, height: 44)
                 .contentShape(.circle)
                 .contentTransition(.symbolEffect(.replace))
@@ -505,28 +541,34 @@ public struct ChatView: View {
     }
 }
 
-/// Suggestions de l'accueil. `prefix` remplit la barre ; `nil` ouvre le mode vocal. Formulées sans rien promettre
-/// que le moteur ne fasse pas : ce sont des débuts de phrase, l'utilisateur complète.
-struct Suggestion: Identifiable {
+/// Idées de questions du quotidien (validées le 2026-10-23), rangées par défaut. `needsMedia` : seulement si le moteur
+/// accepte les fichiers. Formulées sans rien promettre que le moteur ne fasse pas : des débuts de phrase à compléter.
+struct Idea: Identifiable {
+    enum Action {
+        case prefix(String)
+        case createImage
+        case attachDocument
+    }
+
     let id: String
     let symbol: String
     let title: String
-    let detail: String
-    let prefix: String?
+    let action: Action
 
-    /// Questions du quotidien (maquette validée le 2026-10-23) : des débuts de phrase que la personne complète.
-    static let all: [Suggestion] = [
-        Suggestion(id: "organiser", symbol: "creditcard", title: "Organiser", detail: "un budget pour le mois",
-                   prefix: "Aide-moi à faire un budget pour le mois : "),
-        Suggestion(id: "ecrire", symbol: "square.and.pencil", title: "Écrire", detail: "une lettre à la mairie",
-                   prefix: "Écris une lettre à la mairie pour "),
-        Suggestion(id: "comprendre", symbol: "questionmark.circle", title: "Comprendre",
-                   detail: "une facture, un papier officiel", prefix: "Explique-moi simplement ce document : "),
-        Suggestion(id: "chercher", symbol: "magnifyingglass", title: "Chercher", detail: "un horaire, une adresse, une info",
-                   prefix: "Cherche "),
-        Suggestion(id: "cuisiner", symbol: "fork.knife", title: "Cuisiner", detail: "avec ce qu'il reste à la maison",
-                   prefix: "Que puis-je cuisiner avec "),
-        Suggestion(id: "parler", symbol: "waveform", title: "Parler", detail: "à voix haute avec AVE", prefix: nil),
+    var needsMedia: Bool {
+        if case .prefix = action { return false }
+        return true
+    }
+
+    static let all: [Idea] = [
+        Idea(id: "lettre", symbol: "envelope", title: "Écrire une lettre", action: .prefix("Écris une lettre à la mairie pour ")),
+        Idea(id: "facture", symbol: "doc.text", title: "Comprendre une facture",
+             action: .prefix("Explique-moi simplement cette facture : ")),
+        Idea(id: "budget", symbol: "creditcard", title: "Budget du mois",
+             action: .prefix("Aide-moi à faire un budget pour le mois : ")),
+        Idea(id: "image", symbol: "photo", title: "Créer une image", action: .createImage),
+        Idea(id: "resume", symbol: "doc.plaintext", title: "Résumer un document", action: .attachDocument),
+        Idea(id: "chercher", symbol: "magnifyingglass", title: "Chercher une info", action: .prefix("Cherche ")),
     ]
 }
 

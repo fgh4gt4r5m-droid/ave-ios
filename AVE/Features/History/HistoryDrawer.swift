@@ -18,6 +18,7 @@ public struct HistoryDrawer: View {
     @State private var query = ""
     @State private var renaming: StoredConversation?
     @State private var newTitle = ""
+    @State private var deleting: StoredConversation?
     @Environment(\.aveTheme) private var theme
 
     public init(conversations: [StoredConversation], currentID: UUID?, profileName: String, accountLabel: String,
@@ -98,6 +99,17 @@ public struct HistoryDrawer: View {
                 renaming = nil
             }
         }
+        .confirmationDialog("Supprimer cette conversation ?", isPresented: Binding(get: { deleting != nil },
+                                                                                  set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible, presenting: deleting) { conversation in
+            Button("Supprimer", role: .destructive) {
+                onDelete(conversation.id)
+                deleting = nil
+            }
+            Button("Annuler", role: .cancel) { deleting = nil }
+        } message: { _ in
+            Text("Elle sera effacée de cet iPhone.")
+        }
     }
 
     @ViewBuilder private var list: some View {
@@ -147,7 +159,8 @@ public struct HistoryDrawer: View {
                 newTitle = conversation.title
                 renaming = conversation
             }
-            Button("Supprimer", systemImage: "trash", role: .destructive) { onDelete(conversation.id) }
+            // Écrans épurés validés : la suppression se confirme (menu du système, puis confirmation).
+            Button("Supprimer", systemImage: "trash", role: .destructive) { deleting = conversation }
         }
     }
 }

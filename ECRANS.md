@@ -142,3 +142,33 @@ Validées une par une par le propriétaire sur la page « Validation des maquett
   reconnecte alors sans) ; « se souvient des N derniers messages » si le moteur en a écarté.
 - **Pas encore codé, en attente du moteur** : sources (D8, après le choix du moteur de recherche par le propriétaire),
   titre généré (D10). Non vérifié : fluidité des fragments sur un vrai téléphone, comportement avec le vrai modèle.
+
+## Écrans épurés, lumière douce et nouvelle entrée (validés le 2026-10-23)
+Remplacent les écrans « assistant du quotidien » de la même soirée. Règles du propriétaire : le symbole et ses animations
+ne changent pas ; **composants natifs d'iOS uniquement** (boutons en verre, interrupteurs, menus, feuilles du système) ;
+une maquette HTML ne montre qu'une intention.
+- **Accueil** : le symbole au repos, « Bonjour, Fatou » (prénom tiré du nom complet), « Comment puis-je vous aider ? ».
+  Idées rangées : une pastille « Idées » au-dessus de la saisie ; touchée, une rangée de boutons en verre défile (écrire
+  une lettre, comprendre une facture, budget du mois, créer une image, résumer un document, chercher une info) ; elles se
+  rangent dès qu'on écrit ou qu'on en choisit une.
+- **Saisie en deux étages** : « Demandez à AVE », puis « + » à gauche et le bouton rond à droite (Envoyer en bleu AVE
+  #2F5BE0, seul aplat de couleur ; Arrêter et Mode vocal en noir). Dessous, en petit : la mention d'essai (selon le moteur)
+  puis « AVE peut se tromper. Vérifiez les informations importantes. »
+- **Réponse** : le symbole en tête de la DERNIÈRE réponse (réflexion pendant l'écriture, repos ensuite) ; dessous :
+  copier, écouter, bon et mauvais (seulement avec l'accord d'aide à l'amélioration : sans lui le moteur ne garde rien),
+  « Plus » (partager, régénérer).
+- **Mode vocal** : toujours sombre ; la langue en haut ; trois boutons de 64 points (couper le micro, sous-titres,
+  Terminer en rouge à droite) ; toucher le symbole coupe la voix d'AVE.
+- **Lumière douce** (`AmbientGlow`, `GlowLevel`) : sur le pourtour en mode vocal, froide quand on parle, chaude quand AVE
+  parle ; intensité selon le son lissé, de 20 % à 80 % par paliers de 5 % avec une transition d'une demi-seconde, couleurs
+  qui tournent en 8 s ; fixe avec « Réduire les animations », absente en contraste élevé. Dans la conversation écrite,
+  seulement un halo léger autour de la saisie quand AVE lit à voix haute.
+- **Historique** : la suppression se confirme.
+- **Entrée** : bienvenue, numéro, code (remplissage automatique d'iOS), puis le nom complet (pré-rempli par Apple ; pas
+  d'écran pour un essai sans compte), puis « Avant de commencer » : 18 ans ou plus et conditions, deux interrupteurs jamais
+  mis d'avance. Profil gardé par `ave-accounts` (`/account/profile`) et sur l'iPhone. Conditions et politique de
+  confidentialité : brouillons dans l'app (`Terms`), à faire relire par un juriste ; changer leur fond = changer
+  `Terms.currentVersion`, l'accord est alors redemandé.
+- **Pas fait** : le bouton micro de dictée de la maquette (iOS ne laisse pas une app ouvrir la dictée du clavier ; il faut
+  la reconnaissance vocale d'Apple, avec une autorisation de plus : décision du propriétaire attendue). Les sources (D8)
+  attendent le moteur de recherche. Non vérifié : tout l'aspect à l'écran et la fluidité de la lumière sur un vrai iPhone.

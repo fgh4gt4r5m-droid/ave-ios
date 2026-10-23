@@ -6,7 +6,8 @@ import SwiftUI
 /// Même session que la conversation : « Terminer » coupe le micro et revient au texte, la connexion reste ouverte,
 /// et ce qui a été dit s'affiche ensuite dans la conversation.
 /// Proposition 2 : sous-titres en direct (ce que vous dites, ce qu'AVE répond, phrase par phrase) et micro coupé sans
-/// quitter le mode vocal.
+/// quitter le mode vocal. Écrans épurés (validés le 2026-10-23) : plein écran sombre, la langue en haut, trois boutons
+/// ronds de 64 points, « Terminer » seul en rouge à droite (comme raccrocher), et la lumière douce sur le pourtour.
 struct VoiceModeView: View {
     let coordinator: SessionCoordinator
     @Binding var language: AVELanguageSelection
@@ -38,19 +39,39 @@ struct VoiceModeView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
+            .background {
+                ZStack {
+                    Color.black
+                    AmbientGlow(mood: glowMood, level: glowMood == .speaking ? coordinator.playbackLevel : coordinator.micLevel)
+                }
+                .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.6), value: glowMood)
+            }
             .animation(.easeInOut(duration: 0.2), value: state)
             .animation(.easeInOut(duration: 0.2), value: captions)
             .sensoryFeedback(.impact(weight: .light), trigger: state) { _, new in haptics && (new == .listening || new == .thinking) }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // La langue en haut, au centre : le même titre à menu que la conversation.
+                ToolbarItem(placement: .principal) {
                     Button { showLanguages = true } label: {
-                        Label(LanguageCatalog.option(for: language.language)?.name ?? "Langue", systemImage: "globe")
-                            .labelStyle(.titleAndIcon)
+                        VStack(spacing: 0) {
+                            Text("AVE").font(.headline)
+                            HStack(spacing: 3) {
+                                Text(LanguageCatalog.option(for: language.language)?.name ?? "Langue")
+                                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        .frame(minHeight: 44)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Langue : \(LanguageCatalog.option(for: language.language)?.name ?? "non choisie")")
                 }
             }
         }
+        // Toujours sombre, comme un appel : la lumière se voit, rien d'autre ne bouge.
+        .preferredColorScheme(.dark)
         .sheet(isPresented: $showLanguages) {
             LanguagePicker(selection: $language, options: coordinator.languageOptions)
                 .presentationDetents([.medium, .large])
@@ -124,45 +145,46 @@ struct VoiceModeView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Commandes en bas, comme le mode vocal de ChatGPT : de gros boutons ronds en verre, avec leur nom.
+    /// La lumière : froide quand on parle, chaude quand AVE parle ; rien au repos, en réflexion ou micro coupé.
+    private var glowMood: AmbientGlow.Mood? {
+        switch state {
+        case .listening: return coordinator.micMuted ? nil : .listening
+        case .speaking: return .speaking
+        default: return nil
+        }
+    }
+
+    /// Trois boutons ronds de 64 points en verre (on les touche sans regarder). Couper la voix d'AVE : toucher le symbole.
     private var controls: some View {
-        GlassEffectContainer(spacing: 22) {
-            HStack(spacing: 22) {
-                roundControl(coordinator.micMuted ? "Micro coupé" : "Micro",
+        GlassEffectContainer(spacing: 28) {
+            HStack(spacing: 28) {
+                roundControl(coordinator.micMuted ? "Micro coupé" : "Couper le micro",
                              systemImage: coordinator.micMuted ? "mic.slash.fill" : "mic.fill",
                              active: coordinator.micMuted) {
                     Task { await coordinator.setMicMuted(!coordinator.micMuted) }
                 }
                 roundControl("Sous-titres", systemImage: "captions.bubble", active: captions) { captions.toggle() }
-                if state == .speaking {
-                    roundControl("Interrompre", systemImage: "stop.fill", active: false) {
-                        Task { await coordinator.interruptAssistant() }
-                    }
-                    .transition(.opacity)
-                }
-                roundControl("Terminer", systemImage: "xmark", active: false) {
+                // Terminer : le seul bouton rouge, à droite, comme raccrocher dans Téléphone.
+                roundControl("Terminer", systemImage: "xmark", active: false, tint: .red) {
                     Task { await coordinator.setMode(.text) }
                 }
             }
         }
     }
 
-    private func roundControl(_ title: String, systemImage: String, active: Bool,
+    private func roundControl(_ title: String, systemImage: String, active: Bool, tint: Color? = nil,
                               action: @escaping () -> Void) -> some View {
-        VStack(spacing: 6) {
-            Button(action: action) {
-                Image(systemName: systemImage)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(active ? Color(.systemBackground) : Color.primary)
-                    .frame(width: 60, height: 60)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .tint(active ? Color.primary : nil)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(active ? .isSelected : [])
-            Text(title).font(.footnote).foregroundStyle(.secondary).lineLimit(1).accessibilityHidden(true)
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(tint != nil || active ? Color.white : Color.primary)
+                .frame(width: 64, height: 64)
         }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .tint(tint ?? (active ? Color.white.opacity(0.35) : Color.white.opacity(0.14)))
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 #endif

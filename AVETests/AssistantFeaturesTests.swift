@@ -134,3 +134,21 @@ struct StopResponseTests {
         await c.stop()
     }
 }
+
+@Suite("Écrans épurés : lumière douce")
+struct GlowLevelTests {
+    @Test("jamais de flash : plancher et plafond bas, paliers de 5 %, fixe avec « Réduire les animations »")
+    func bounds() {
+        #expect(GlowLevel.edge(level: 0, reduceMotion: false) == 0.2)
+        #expect(GlowLevel.edge(level: 1, reduceMotion: false) <= 0.8)
+        #expect(GlowLevel.edge(level: 5, reduceMotion: false) <= 0.8)    // niveau aberrant : borné
+        #expect(GlowLevel.edge(level: -1, reduceMotion: false) == 0.2)
+        #expect(GlowLevel.edge(level: 0.9, reduceMotion: true) == 0.35)
+        #expect(GlowLevel.halo(level: 1, reduceMotion: false) <= 0.6)
+        #expect(GlowLevel.halo(level: 0.5, reduceMotion: true) == 0.3)
+        for step in 0...20 {
+            let value = GlowLevel.edge(level: Float(step) / 20, reduceMotion: false)
+            #expect(abs(value * 20 - (value * 20).rounded()) < 1e-9)
+        }
+    }
+}

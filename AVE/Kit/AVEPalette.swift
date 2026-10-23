@@ -41,7 +41,7 @@ public enum AVEPalette {
     public static let white = AVEColor(hex: 0xFFFFFF)
     /// Variantes pour l'APPARENCE CLAIRE (fonds système blancs, 2026-10-23) : le bleu vif et l'ambre n'y sont pas lisibles
     /// (2,6:1 et 1,7:1 sur blanc). DÉRIVÉES, non relevées sur le logo : même teinte, assombrie jusqu'au seuil WCAG.
-    public static let blueOnLight = AVEColor(hex: 0x1D5FD1)
+    public static let blueOnLight = AVEColor(hex: 0x2F5BE0)  // relevé sur les vecteurs du logo (écrans épurés validés le 2026-10-23) : blanc dessus 5,7:1
     public static let amberOnLight = AVEColor(hex: 0xB45309)
     public static let black = AVEColor(hex: 0x000000)
 }

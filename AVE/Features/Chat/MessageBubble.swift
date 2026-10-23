@@ -19,6 +19,9 @@ struct MessageBubble: View {
     var onRetry: (() -> Void)?
     /// « Modifier » (question de la personne) : la remet dans la barre de saisie.
     var onEdit: (() -> Void)?
+    /// Le symbole d'AVE en tête de la réponse (écrans épurés validés) : seulement sur la dernière, pour ne pas animer tout
+    /// le fil. Ses animations ne changent pas : réflexion pendant l'écriture, repos ensuite.
+    var showsMark = false
 
     @Environment(\.aveTheme) private var theme
     @State private var copied = false
@@ -59,6 +62,11 @@ struct MessageBubble: View {
 
     private var assistant: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if showsMark {
+                AVELiveMark(phase: message.status == .streaming ? .thinking : .idle)
+                    .frame(width: 26, height: 26)
+                    .accessibilityHidden(true)
+            }
             if message.isVoiceOnly {
                 Label("Réponse vocale", systemImage: "waveform")
                     .foregroundStyle(.secondary)
@@ -79,8 +87,9 @@ struct MessageBubble: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// Copier, lire à voix haute, avis : icônes seules sous la réponse, comme ChatGPT et Claude, chacune avec un libellé
-    /// VoiceOver et 44 pt de cible.
+    /// Sous la réponse (écrans épurés validés) : copier, écouter, bon, mauvais, puis « Plus » (menu du système : partager,
+    /// régénérer). Icônes seules, chacune avec un libellé VoiceOver et 44 pt de cible. Bon et mauvais n'apparaissent qu'avec
+    /// l'accord d'aide à l'amélioration : sans lui, le moteur ne garde pas l'avis.
     @ViewBuilder private var actions: some View {
         HStack(spacing: 0) {
             if !message.isVoiceOnly, !message.text.isEmpty {
@@ -91,29 +100,31 @@ struct MessageBubble: View {
             }
             if canReadAloud {
                 iconButton(isReplaying ? "speaker.wave.2.fill" : "speaker.wave.2",
-                           label: isReplaying ? "Lecture en cours" : "Lire à voix haute", action: onReplay)
+                           label: isReplaying ? "Lecture en cours" : "Écouter", action: onReplay)
                     .disabled(isReplaying)
             }
-            if !message.isVoiceOnly, !message.text.isEmpty {
-                ShareLink(item: message.text) {
-                    Image(systemName: "square.and.arrow.up")
+            if canFeedback, message.utteranceID != nil {
+                if feedbackSent {
+                    Text(UserMessages.feedbackThanks).font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 8)
+                } else {
+                    iconButton("hand.thumbsup", label: "Bonne réponse") { onFeedback(.up) }
+                    iconButton("hand.thumbsdown", label: "Mauvaise réponse") { onFeedback(.down) }
+                }
+            }
+            if (!message.isVoiceOnly && !message.text.isEmpty) || onRetry != nil {
+                Menu {
+                    if !message.isVoiceOnly, !message.text.isEmpty {
+                        ShareLink("Partager", item: message.text)
+                    }
+                    if let onRetry { Button("Régénérer", systemImage: "arrow.clockwise", action: onRetry) }
+                } label: {
+                    Image(systemName: "ellipsis")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
-                .accessibilityLabel("Partager")
-            }
-            if let onRetry {
-                iconButton("arrow.clockwise", label: "Réessayer", action: onRetry)
-            }
-            if canFeedback, message.utteranceID != nil {
-                if feedbackSent {
-                    Text(UserMessages.feedbackThanks).font(.footnote).foregroundStyle(.secondary).padding(.leading, 8)
-                } else {
-                    iconButton("hand.thumbsup", label: "Bonne réponse") { onFeedback(.up) }
-                    iconButton("hand.thumbsdown", label: "Mauvaise réponse") { onFeedback(.down) }
-                }
+                .accessibilityLabel("Plus")
             }
         }
         .padding(.leading, -12)  // aligne l'icône (et non sa zone tactile) sur le texte
@@ -129,7 +140,7 @@ struct MessageBubble: View {
         Button("Copier", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.text }
         if canReadAloud { Button("Lire à voix haute", systemImage: "speaker.wave.2", action: onReplay) }
         ShareLink("Partager", item: message.text)
-        if let onRetry { Button("Réessayer", systemImage: "arrow.clockwise", action: onRetry) }
+        if let onRetry { Button("Régénérer", systemImage: "arrow.clockwise", action: onRetry) }
     }
 
     private func iconButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
