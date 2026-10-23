@@ -27,7 +27,8 @@ public struct LearningPromptView: View {
                     } label: {
                         Label("Écouter", systemImage: "speaker.wave.2.fill").frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
                 }
                 HStack(spacing: 12) {
                     answerButton(prompt.notice.yes, systemImage: "hand.thumbsup.fill", granted: true)
@@ -49,11 +50,15 @@ public struct LearningPromptView: View {
             speaker.stop()
             onAnswer(granted)
         } label: {
-            Label(title, systemImage: systemImage).frame(maxWidth: .infinity, minHeight: 44)
+            // Même style pour « Oui » et « Non » : aucun des deux n'est mis en avant (consentement libre).
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+                .foregroundStyle(theme.onAccent)
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.glassProminent)
         .tint(theme.accent)
-        .foregroundStyle(theme.onAccent)
+        .controlSize(.large)
     }
 }
 

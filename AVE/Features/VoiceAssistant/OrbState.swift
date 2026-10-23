@@ -45,6 +45,15 @@ public enum OrbState: Sendable, Equatable {
         }
     }
 
+    /// Légende VISIBLE sous l'orbe. Distincte de `hint`, qui est lu par VoiceOver (« Touchez deux fois… » n'a de sens
+    /// que pour lui).
+    public var caption: String {
+        switch self {
+        case .speaking: return "Parlez ou touchez l'orbe pour l'interrompre."
+        default: return hint
+        }
+    }
+
     public var symbolName: String {
         switch self {
         case .idle: return "mic.fill"

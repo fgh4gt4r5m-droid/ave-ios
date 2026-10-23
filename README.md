@@ -1,6 +1,6 @@
 # AVE : app iOS (voix et texte)
 
-Cible : iOS 17+, Swift 6. Le cœur testable (Domain, Core/Network, Core/Storage) est un package SwiftPM ;
+Cible : iOS 27+ (Xcode 27.1), Swift 6, composants système et HIG d'Apple. Le cœur testable (Domain, Core/Network, Core/Storage) est un package SwiftPM ;
 l'app SwiftUI et la Live Activity iront dans des cibles Xcode (non créées à ce stade).
 
 ```bash

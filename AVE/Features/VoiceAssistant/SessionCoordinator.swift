@@ -24,6 +24,9 @@ public final class SessionCoordinator {
         /// Nombre de tours terminés avant de proposer l'aide à l'amélioration (l'utilisateur a vu ce que fait l'app).
         public var learningPromptAfterTurns = 1
         public var learningNotices: [LearningNoticeText] = LearningNotice.all
+        /// Avis permanent sur l'état réel du moteur (écho, son de test). Fourni par l'app selon sa configuration, et non
+        /// codé en dur : le jour où le moteur aura un vrai dialogue, l'avis disparaît sans toucher au code.
+        public var demoNotice: String?
 
         public init() {}
     }
@@ -59,6 +62,7 @@ public final class SessionCoordinator {
 
     public var orbState: OrbState { OrbState(phase: phase, connection: connection) }
     public var supportsTextInput: Bool { configuration.supportsTextInput }
+    public var demoNotice: String? { configuration.demoNotice }
 
     /// Appelé APRÈS accord explicite de l'utilisateur (ou si le serveur dit `confirm: false`).
     @ObservationIgnored public var onAction: (@MainActor (ActionCard) -> Void)?

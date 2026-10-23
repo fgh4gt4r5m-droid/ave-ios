@@ -27,5 +27,7 @@
 	<key>AVEAllowInsecureLocal</key><string>$(AVE_ALLOW_INSECURE_LOCAL)</string>
 	<key>AVEAccountsURL</key><string>$(AVE_ACCOUNTS_URL)</string>
 	<key>AVEDefaultCountryCode</key><string>$(AVE_DEFAULT_COUNTRY_CODE)</string>
+	<key>AVEDemoEngine</key><string>$(AVE_DEMO_ENGINE)</string>
+	<key>ITSAppUsesNonExemptEncryption</key><false/>
 </dict>
 </plist>

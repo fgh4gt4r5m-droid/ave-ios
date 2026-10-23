@@ -45,9 +45,10 @@ public struct LanguagePicker: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(selection.language == option.language ? .isSelected : [])
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Langue")
             .navigationBarTitleDisplayModeInline()
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK", systemImage: "checkmark") { dismiss() } } }
         }
     }
 }

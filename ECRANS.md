@@ -3,8 +3,14 @@
 ## Structure
 - `Features/VoiceAssistant/SessionCoordinator` : une session, deux modes. Relie client WebSocket, audio, machine du
   barge-in, VAD et conversation. Basculer voix ↔ texte coupe le micro, jamais la session.
-- `Features/Chat` : `ChatTranscript` (pur, testé), `ChatView`, bulles, cartes d'action.
-- `Features/VoiceAssistant/FloatingVoiceOrbView` + `OrbState` (pur, testé).
+- `Features/Chat` : `ChatTranscript` (pur, testé), `ChatView` (conversation + barre de saisie Liquid Glass, comme ChatGPT/Claude),
+  `MessageBubble` (la personne en bulle, l'assistant en texte libre), cartes d'action, `NoticeBanner`.
+- `Features/VoiceAssistant/VoiceModeView` : mode vocal plein écran ouvert depuis la barre de saisie, même session.
+  `FloatingVoiceOrbView` + `OrbState` (pur, testé ; `caption` = légende visible, `hint` = aide VoiceOver).
+- Avis « Version d'essai » : `SessionCoordinator.Configuration.demoNotice`, activé par `AVE_DEMO_ENGINE` (xcconfig) tant que le
+  moteur répond par écho avec une voix de test.
+- La vue n'arrête jamais la session (`onDisappear` est aussi appelé quand le mode vocal la recouvre) : le propriétaire du
+  coordinateur appelle `stop()`.
 - `Features/Shared` : `LanguageCatalog`/`LanguagePicker`, `UserMessages`, `AVETheme` (charte remplaçable par WoYo/TaGa).
 - Les vues SwiftUI sont sous `#if os(iOS)` ; la logique est testable partout.
 

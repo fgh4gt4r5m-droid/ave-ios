@@ -6,4 +6,6 @@ AVE_ALLOW_INSECURE_LOCAL = YES
 AVE_ACCOUNTS_URL =
 AVE_DEFAULT_COUNTRY_CODE = 224
 AVE_APPATTEST_ENV = development
+// YES tant que le moteur répond par écho avec une voix de test : l'app affiche un avis « Version d'essai ».
+AVE_DEMO_ENGINE = YES
 #include? "Secrets.xcconfig"

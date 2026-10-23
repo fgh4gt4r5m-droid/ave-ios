@@ -35,6 +35,8 @@ Avertissement restant : `.allowBluetooth` déprécié dans le SDK iOS 26 (renomm
 - **Apprentissage avec consentement** : réservé aux **comptes identifiés** (pas de notice pour les invités, option 1) ; « Non » par défaut ; refus mémorisé ; notice **française seulement** (aucune traduction locale inventée ; à faire par des natifs + relecture juridique) ; lue à voix haute avec la voix du système.
 - `hello.vad:"client"` (le serveur a un VAD serveur par défaut) : l'app ne transmet le micro que pendant la parole (3G).
 - Confirmation explicite des `action` quand `confirm:true`.
+- **iOS 27 minimum, Xcode 27.1, HIG d'Apple et Liquid Glass, interface épurée comme ChatGPT/Claude** (2026-10-23) : une
+  conversation avec barre de saisie, mode vocal plein écran. Maquettes validées (canevas et galerie dans les Artifacts du propriétaire).
 - Logo retenu : proposition 1 (carte de l'Afrique + barres de son) ; palette relevée (`AVEPalette`), contrastes WCAG testés. Icône 1024 px et logos vectoriels **à fournir par un designer** (`ASSETS.md`).
 
 ## 6. Questions ouvertes (à trancher par le propriétaire)

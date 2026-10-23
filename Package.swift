@@ -1,12 +1,13 @@
 // swift-tools-version: 6.0
-// Package SwiftPM du cœur testable (Domain + réseau + stockage). L'app SwiftUI, l'audio
-// et la Live Activity vivent dans la cible Xcode et ne sont pas dans ce package.
-// Lancer les tests sur Mac : `swift test`
+// Package SwiftPM : AVECore (Domain, réseau, stockage, comptes) et AVEKit (audio, écrans, Live Activity).
+// L'app (AVE/App) et l'extension Live Activity sont des cibles Xcode (project.yml). Tests sur Mac : `swift test`.
 import PackageDescription
 
 let package = Package(
     name: "AVECore",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    // iOS 27 minimum (décision du propriétaire, 2026-10-23) : composants les plus récents, aucune branche de compatibilité.
+    // Forme texte : `.v27` exigerait un swift-tools-version plus récent. macOS 14 : hôte des tests `swift test`.
+    platforms: [.iOS("27.0"), .macOS(.v14)],
     products: [
         .library(name: "AVECore", targets: ["AVECore"]),
         .library(name: "AVEKit", targets: ["AVEKit"]),

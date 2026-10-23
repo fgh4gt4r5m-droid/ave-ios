@@ -187,7 +187,9 @@ struct PresentationTests {
         let all: [OrbState] = [.idle, .listening, .thinking, .speaking, .interrupted, .reconnecting, .unavailable]
         #expect(Set(all.map(\.label)).count == all.count)
         #expect(Set(all.map(\.symbolName)).count == all.count)
-        #expect(all.allSatisfy { !$0.hint.isEmpty })
+        #expect(all.allSatisfy { !$0.hint.isEmpty && !$0.caption.isEmpty })
+        // La légende visible ne parle jamais du geste VoiceOver.
+        #expect(all.allSatisfy { !$0.caption.contains("deux fois") })
         #expect(all.filter(\.isInteractive) == [.speaking])
     }
 

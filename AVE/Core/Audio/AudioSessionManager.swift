@@ -27,9 +27,8 @@ public final class AudioSessionManager: AudioLifecycle, @unchecked Sendable {
     /// `.playAndRecord` + `.voiceChat` : annulation d'écho, gain automatique, routage voix.
     public func activate() throws {
         let session = AVAudioSession.sharedInstance()
-        // `.allowBluetooth` (profil mains libres) est renommé `.allowBluetoothHFP` dans le SDK iOS 26 ;
-        // l'ancien nom reste valide en iOS 17.
-        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
+        // `.allowBluetoothHFP` (profil mains libres) : nouveau nom de `.allowBluetooth`, déprécié depuis le SDK iOS 26.
+        try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP, .defaultToSpeaker])
         try session.setPreferredSampleRate(Double(AVEAudio.sampleRate))
         try session.setPreferredIOBufferDuration(Double(AVEAudio.frameMilliseconds) / 1000)
         try session.setActive(true)

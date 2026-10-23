@@ -6,7 +6,8 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 45
     environment:
-      xcode: latest
+      # Version fixée : « latest » désigne la version par défaut de Codemagic (26.6 le 2026-10-23), trop ancienne pour iOS 27.
+      xcode: 27.1
     triggering:
       events: [push, pull_request]
       branch_patterns:
@@ -34,10 +35,11 @@ workflows:
       - name: "Tests sur simulateur iOS"
         script: |
           set -o pipefail
-          DEVICE=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+[^(]*' | sed 's/ *$//')
+          # Premier iPhone du runtime iOS 27 : la machine a aussi un runtime 26.x, inférieur au minimum de l'app.
+          DEVICE=$(xcrun simctl list devices available | awk '/^-- iOS 27/ {f=1; next} /^--/ {f=0} f && /iPhone/ {sub(/^ +/, ""); sub(/ \(.*/, ""); print; exit}')
           echo "Simulateur : $DEVICE"
           xcodebuild -project AVE.xcodeproj -scheme AVE -configuration Debug \
-            -destination "platform=iOS Simulator,name=$DEVICE" \
+            -destination "platform=iOS Simulator,name=$DEVICE,OS=latest" \
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log || { echo '--- 80 dernières lignes ---'; tail -n 80 test.log; exit 1; }
     artifacts:
       - build.log
@@ -55,7 +57,7 @@ workflows:
     environment:
       groups:
         - ave                       # AVE_ENDPOINT, AVE_ACCOUNTS_URL (adresses https/wss de production)
-      xcode: latest
+      xcode: 27.1
       ios_signing:
         distribution_type: app_store
         bundle_identifier: fr.ave.app

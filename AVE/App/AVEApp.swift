@@ -26,15 +26,11 @@ struct RootView: View {
         Group {
             if let failure {
                 Text(failure).padding()
-            } else if case .signedIn = authState, let coordinator, let session {
-                ChatView(coordinator: coordinator, language: $language)
-                    .overlay(alignment: .topTrailing) {
-                        Button { showAccount = true } label: {
-                            Image(systemName: "person.crop.circle").font(.title2).frame(width: 44, height: 44)
-                        }
-                        .accessibilityLabel("Mon compte")
+            } else if case .signedIn(let kind) = authState, let coordinator, let session {
+                ChatView(coordinator: coordinator, language: $language, onAccount: { showAccount = true })
+                    .sheet(isPresented: $showAccount) {
+                        AccountView(session: session, coordinator: coordinator, accountKind: kind)
                     }
-                    .sheet(isPresented: $showAccount) { AccountView(session: session, coordinator: coordinator) }
             } else if let signIn {
                 SignInView(model: signIn)
             } else {
@@ -90,7 +86,12 @@ struct RootView: View {
             endpoint: env.endpoint, defaultLanguage: language.language,
             tokenProvider: auth.tokenProvider(), logger: .system, clientInfo: env.clientInfo)
         let client = configuration.makeClient(language: language.language)
-        coordinator = SessionCoordinator(client: client, devices: try .system(),
+        var sessionConfiguration = SessionCoordinator.Configuration()
+        sessionConfiguration.demoNotice = env.demoEngine ? UserMessages.demoEngine : nil
+        // La conversation s'ouvre en mode texte, comme les assistants de référence ; le mode vocal est à un geste
+        // (bouton de la barre de saisie, gros bouton « Parler » de l'accueil). Le micro n'est demandé qu'à ce moment-là.
+        coordinator = SessionCoordinator(client: client, devices: try .system(), mode: .text,
+                                         configuration: sessionConfiguration,
                                          activity: SessionLiveActivityController(), language: language.language,
                                          learningPreferences: UserDefaultsLearningPreferences(),
                                          accountKind: kind)

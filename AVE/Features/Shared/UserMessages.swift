@@ -60,4 +60,6 @@ public enum UserMessages {
     public static let feedbackTooLong = "Votre correction est trop longue (1 000 caractères au maximum)."
     public static let notConnected = "Pas de connexion : message non envoyé. Réessayez dans un instant."
     public static let textTooLong = "Message trop long (4 000 caractères au maximum)."
+    /// État réel du moteur au 2026-10-23 (dialogue en écho, voix de test). Affiché seulement si l'app l'active.
+    public static let demoEngine = "Version d'essai : l'assistant répète ce que vous dites et sa voix est un son de test."
 }

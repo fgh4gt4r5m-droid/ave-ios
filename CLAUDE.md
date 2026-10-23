@@ -32,7 +32,12 @@ africaines. Cibles de terrain : iPhone d'entrée de gamme récent, **3G/4G insta
 
 ## Pile et règles
 
-- iOS 17+, Swift 6 (concurrence stricte), SwiftUI + `@Observable`, async/await, `AsyncStream`. **Pas de Combine.**
+- **iOS 27 minimum, Xcode 27.1** (décision du propriétaire, 2026-10-23), Swift 6 (concurrence stricte), SwiftUI + `@Observable`,
+  async/await, `AsyncStream`. **Pas de Combine.** Aucune branche `#available` : les composants les plus récents partout.
+- **Exigence du propriétaire : l'app native vise l'excellence et suit le HIG d'Apple.** Composants système d'abord (Liquid Glass :
+  `glassEffect`, `GlassEffectContainer`, `.buttonStyle(.glass/.glassProminent)`, barres d'outils système, `safeAreaBar`, feuilles
+  natives) ; interface épurée comme ChatGPT, Claude ou Gemini sur iOS. Le verre est pour la couche de navigation et les contrôles,
+  jamais pour le contenu (bulles, cartes). Les apps Flutter (WoYo, TaGa) peuvent être moins standard ; pas celle-ci.
 - Clean Architecture / MVVM : `Domain` (types purs, sans UIKit/AVFoundation) ← `Core` (réseau, audio) ← `Features` (vues + view models).
 - `@MainActor` uniquement pour l'état d'UI. Réseau et audio dans des **acteurs dédiés** ; aucun `DispatchQueue` sauf là où
   AVFoundation l'impose (callbacks du tap audio : ne rien allouer ni verrouiller dedans, pousser vers un `AsyncStream`).
@@ -113,6 +118,9 @@ Règles du client (`AVEWebSocketClient`) :
 
 - **SessionCoordinator** : une seule session WebSocket ; deux présentations (Chat / Voix) sur le même flux — bascule sans rompre la session.
   Voix → l'événement `transcript` s'inscrit comme bulle utilisateur dans le Chat ; l'utilisateur peut ensuite répondre par `text`.
+- **Structure (décision du 2026-10-23)** : comme ChatGPT ou Claude, un seul écran de conversation avec une barre de saisie
+  Liquid Glass en bas (texte, envoi, bouton « mode vocal ») ; le **mode vocal** s'ouvre en plein écran (`VoiceModeView`) sur la
+  même session. La conversation s'ouvre en mode texte ; l'accueil vide propose un gros bouton « Parler ».
 - **ChatView** : bulles ; la réponse assistant se construit phrase par phrase (`reply_text` par `utterance_id`) ; `action` → `ActionCardView`
   (boutons). **`confirm:true` = bouton de confirmation explicite avant de rendre l'action à l'application hôte** ; la voix seule ne valide jamais.
   `turn_error` → message clair et traduit, pas de silence.

@@ -33,9 +33,11 @@ public struct AVETheme: Sendable {
     public static let standard = AVETheme()
 
     /// Charte de l'app AVE (logo retenu). Contrastes vérifiés par les tests (`AVEPaletteTests`).
+    /// Bulle de la personne sur la surface (et non sur le bleu vif) : comme dans les assistants de référence, la couleur
+    /// d'accent reste réservée aux actions.
     public static let ave = AVETheme(
         accent: Color(AVEPalette.blue), onAccent: Color(AVEPalette.navy), background: Color(AVEPalette.navy),
-        userBubble: Color(AVEPalette.blue), userBubbleText: Color(AVEPalette.navy),
+        userBubble: Color(AVEPalette.surface), userBubbleText: Color(AVEPalette.white),
         assistantBubble: Color(AVEPalette.surface), assistantBubbleText: Color(AVEPalette.white),
         warning: Color(AVEPalette.amber))
 }
