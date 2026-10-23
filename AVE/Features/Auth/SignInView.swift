@@ -77,7 +77,9 @@ public struct SignInView: View {
                             return
                         }
                         let nonce = appleNonce
-                        Task { await model.signInWithApple(identityToken: token, rawNonce: nonce) }
+                        // Code d'autorisation : permet au service de révoquer le jeton Apple si le compte est supprimé.
+                        let code = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+                        Task { await model.signInWithApple(identityToken: token, rawNonce: nonce, authorizationCode: code) }
                     case .failure(let error):
                         if (error as? ASAuthorizationError)?.code == .canceled { model.appleCancelled() } else { model.appleFailed() }
                     }

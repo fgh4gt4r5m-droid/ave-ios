@@ -35,8 +35,10 @@ public struct HTTPAccountsAPI: AccountsAPI {
         try credentials(try await call("POST", "auth/otp/verify", body: ["challenge_id": challengeID, "code": code]), .phone)
     }
 
-    public func signInWithApple(identityToken: String, rawNonce: String) async throws -> AuthCredentials {
-        try credentials(try await call("POST", "auth/apple", body: ["identity_token": identityToken, "nonce": rawNonce]), .apple)
+    public func signInWithApple(identityToken: String, rawNonce: String, authorizationCode: String?) async throws -> AuthCredentials {
+        var body: [String: Any] = ["identity_token": identityToken, "nonce": rawNonce]
+        if let authorizationCode { body["authorization_code"] = authorizationCode }
+        return try credentials(try await call("POST", "auth/apple", body: body), .apple)
     }
 
     public func guestChallenge() async throws -> Data {

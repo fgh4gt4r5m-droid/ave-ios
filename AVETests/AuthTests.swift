@@ -29,8 +29,8 @@ final class StubAccounts: AccountsAPI, @unchecked Sendable {
         record("verify:\(challengeID):\(code)")
         return try verifyResult.get()
     }
-    func signInWithApple(identityToken: String, rawNonce: String) async throws -> AuthCredentials {
-        record("apple")
+    func signInWithApple(identityToken: String, rawNonce: String, authorizationCode: String?) async throws -> AuthCredentials {
+        record(authorizationCode.map { "apple:\($0)" } ?? "apple")
         return try appleResult.get()
     }
     func guestChallenge() async throws -> Data { record("guestChallenge"); return Data([9]) }
@@ -266,10 +266,24 @@ struct HTTPAccountsAPITests {
     func credentials() async throws {
         let a = try api(body: #"{"refresh_token":"rt-1"}"#)
         #expect(try await a.verifyOTP(challengeID: "c", code: "123456") == AuthCredentials(refreshToken: "rt-1", kind: .phone))
-        #expect(try await a.signInWithApple(identityToken: "i", rawNonce: "n").kind == .apple)
+        #expect(try await a.signInWithApple(identityToken: "i", rawNonce: "n", authorizationCode: nil).kind == .apple)
         #expect(try await a.signInAsGuest(GuestAttestation(keyID: "k", attestation: Data([1])), challenge: Data([2])).kind == .guest)
         let empty = try api(body: "{}")
         await #expect(throws: AuthError.unavailable) { try await empty.verifyOTP(challengeID: "c", code: "1") }
+    }
+
+    @Test("Apple : le code d'autorisation part s'il existe (révocation à la suppression), absent sinon")
+    func appleAuthorizationCode() async throws {
+        let cap = Capture()
+        let a = try api(body: #"{"refresh_token":"rt-1"}"#, capture: cap)
+        _ = try await a.signInWithApple(identityToken: "i", rawNonce: "n", authorizationCode: "c0de")
+        _ = try await a.signInWithApple(identityToken: "i", rawNonce: "n", authorizationCode: nil)
+        let bodies = try cap.requests.map {
+            try #require(try JSONSerialization.jsonObject(with: $0.httpBody ?? Data()) as? [String: Any])
+        }
+        #expect(bodies.count == 2 && cap.requests.allSatisfy { $0.url?.path == "/auth/apple" })
+        #expect(bodies[0]["authorization_code"] as? String == "c0de" && bodies[0]["identity_token"] as? String == "i")
+        #expect(bodies[1]["authorization_code"] == nil && bodies[1]["nonce"] as? String == "n")
     }
 
     @Test("jeton court : en-tête Bearer avec le jeton long")
@@ -293,7 +307,7 @@ struct HTTPAccountsAPITests {
     func errors() async throws {
         let phone = try #require(PhoneNumber("+224621234567"))
         await #expect(throws: AuthError.signedOut) { try await api(status: 401).accessToken(refreshToken: "x") }
-        await #expect(throws: AuthError.rejected) { try await api(status: 401).signInWithApple(identityToken: "i", rawNonce: "n") }
+        await #expect(throws: AuthError.rejected) { try await api(status: 401).signInWithApple(identityToken: "i", rawNonce: "n", authorizationCode: nil) }
         await #expect(throws: AuthError.wrongCode) { try await api(status: 400, body: #"{"error":"wrong_code"}"#).verifyOTP(challengeID: "c", code: "1") }
         await #expect(throws: AuthError.invalidPhone) { try await api(status: 400, body: #"{"error":"invalid_phone"}"#).requestOTP(phone: phone, channel: .sms) }
         await #expect(throws: AuthError.guestUnsupported) { try await api(status: 403, body: #"{"error":"guest_unsupported"}"#).guestChallenge() }

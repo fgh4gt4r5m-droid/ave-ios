@@ -16,7 +16,7 @@ struct DevAccountsAPI: AccountsAPI {
         return AuthCredentials(refreshToken: "dev-refresh", kind: .phone)
     }
 
-    func signInWithApple(identityToken: String, rawNonce: String) async throws -> AuthCredentials {
+    func signInWithApple(identityToken: String, rawNonce: String, authorizationCode: String?) async throws -> AuthCredentials {
         AuthCredentials(refreshToken: "dev-refresh", kind: .apple)
     }
 

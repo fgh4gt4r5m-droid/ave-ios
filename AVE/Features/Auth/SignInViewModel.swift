@@ -78,9 +78,10 @@ public final class SignInViewModel {
     }
 
     /// `rawNonce` : le nonce brut dont le SHA-256 a été donné à Apple (le service le revérifie).
-    public func signInWithApple(identityToken: String, rawNonce: String) async {
+    public func signInWithApple(identityToken: String, rawNonce: String, authorizationCode: String? = nil) async {
         await run {
-            let credentials = try await self.api.signInWithApple(identityToken: identityToken, rawNonce: rawNonce)
+            let credentials = try await self.api.signInWithApple(identityToken: identityToken, rawNonce: rawNonce,
+                                                                 authorizationCode: authorizationCode)
             try await self.session.adopt(credentials)
         }
     }
