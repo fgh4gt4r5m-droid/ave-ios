@@ -33,6 +33,10 @@ public final class SessionCoordinator {
         /// Avis permanent sur l'état réel du moteur (écho, son de test). Fourni par l'app selon sa configuration, et non
         /// codé en dur : le jour où le moteur aura un vrai dialogue, l'avis disparaît sans toucher au code.
         public var demoNotice: String?
+        /// Reprise des tâches après une session perdue (D1) : pause entre deux tours de vérification, et entre deux
+        /// requêtes (limite du moteur : 1 toutes les 3 s par utilisateur, après 20 d'avance).
+        public var taskPollInterval: Duration = .seconds(10)
+        public var taskRequestSpacing: Duration = .seconds(3)
 
         public init() {}
     }
@@ -86,8 +90,9 @@ public final class SessionCoordinator {
     /// `nil` : pas de fichiers ni d'images (app hôte, démo hors ligne).
     @ObservationIgnored let media: MediaServices?
     @ObservationIgnored var uploadTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var taskRecovery: Task<Void, Never>?
     @ObservationIgnored private let devices: AudioDevices
-    @ObservationIgnored private let configuration: Configuration
+    @ObservationIgnored let configuration: Configuration
     @ObservationIgnored private let learningPreferences: any LearningPreferences
     @ObservationIgnored private var askedLearningThisSession = false
     @ObservationIgnored private var completedTurns = 0
@@ -163,6 +168,8 @@ public final class SessionCoordinator {
         for upload in uploadTasks.values { upload.cancel() }
         uploadTasks = [:]
         attachmentDrafts = []
+        taskRecovery?.cancel()
+        taskRecovery = nil
         turnTimer?.cancel()
         stopMic()
         devices.player.purge()
@@ -448,7 +455,11 @@ public final class SessionCoordinator {
             connection = state
             switch state {
             case .open(let resumed):
-                if !resumed && hasBeenOpen { notice = UserMessages.sessionRestarted }
+                if !resumed && hasBeenOpen {
+                    notice = UserMessages.sessionRestarted
+                    // Les événements des tâches de l'ancienne session sont perdus : on les reprend par HTTP.
+                    detachTasksAfterSessionLoss()
+                }
                 hasBeenOpen = true
                 await flushPendingTexts()
             case .failed(let error):

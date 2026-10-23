@@ -93,6 +93,16 @@ public struct MediaTaskFailure: Sendable, Equatable {
     public let retryAfterSeconds: Int?
 }
 
+/// Réponse de `GET /v1/tasks/{task_id}` (D1 du contrat, moteur `main` @ `35a4757`) : reprise d'un résultat quand la
+/// session qui attendait la tâche est perdue (coupure plus longue que le délai de grâce). `state` est une liste fermée.
+public enum MediaTaskStatus: Sendable, Equatable {
+    case running
+    /// Mêmes champs et valeurs que `task_done`.
+    case done(MediaTaskResult)
+    /// Une tâche annulée répond `cancelled`. Jamais de `retry_after_s` ici.
+    case failed(code: String)
+}
+
 /// Réponse de `POST /v1/files`.
 public struct UploadedFile: Sendable, Equatable {
     public let fileID: String

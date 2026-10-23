@@ -106,10 +106,16 @@ Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Si
    conversation). Image : « Générée par IA » toujours, « Image de démonstration » + phrase tant que `simulated` ; Enregistrer
    (Photos, ajout seul), Partager, Refaire, Signaler, Plus. Document : Ouvrir (aperçu d'iOS), Partager, Enregistrer dans Fichiers.
 8. **Signaler** : sept motifs, image masquée tout de suite ; « Merci » seulement si le moteur a gardé le signalement
-   (`reports_disabled` ou image trop ancienne pour le moteur : on le dit).
+   (`reports_disabled` : on le dit). `file_id` et `task_id` sont gardés dans l'historique, même expirés : le moteur accepte
+   le signalement d'une image dont il a oublié le fichier (D3, `main` @ `35a4757`). Historiques d'avant : pas de `file_id`,
+   l'app dit que le signalement n'a pas pu être enregistré.
+9. **Session perdue pendant une tâche** (coupure plus longue que le délai de grâce, D1) : une tâche déjà annoncée
+   (`task_started`) est suivie par `GET /v1/tasks/{task_id}`, une requête toutes les 3 s au plus et un tour toutes les 10 s,
+   jusqu'au résultat, à l'échec ou au bout d'1 h (« Le résultat n'est plus disponible ») ; une demande pas encore annoncée
+   est perdue (« La connexion a été coupée… », Réessayer). L'app relancée ne reprend pas les cartes (elles ne sont pas
+   gardées dans l'historique).
 
 À vérifier sur iPhone (rien n'a tourné) : sélecteur de photos et appareil photo, conversion HEIC, aperçu QuickLook,
 enregistrement dans Photos et Fichiers, VoiceOver sur les cartes, mise en page des raccourcis en grande taille de texte.
 Côté moteur : les images restent simulées tant que la machine GPU ne tourne pas, et le tenant `ave-grand-public` doit avoir
 les `features` `images` et `documents`, sinon chaque demande répond « Cette fonction n'est pas encore disponible. ».
-Non fait : reprise d'un résultat après le délai de grâce de la session (`GET /v1/tasks/{id}`).

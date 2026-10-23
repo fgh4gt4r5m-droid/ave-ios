@@ -40,8 +40,9 @@ public struct StoredMessage: Codable, Sendable, Equatable {
     }
 }
 
-/// Ce qu'on garde d'un fichier dans l'historique. Pas de `file_id` : le moteur l'a oublié au bout d'1 h ; le fichier sera
-/// renvoyé depuis l'iPhone si une nouvelle tâche le demande. L'accord coché pour une photo est redemandé (nouvelle session).
+/// Ce qu'on garde d'un fichier dans l'historique. `fileID` et `taskID` restent même expirés : le moteur accepte le
+/// signalement d'une image dont il a oublié le fichier (D3 du contrat, `main` @ `35a4757`). Pour une nouvelle tâche, un
+/// `fileID` expiré n'est pas utilisé : le fichier repart de l'iPhone. L'accord coché pour une photo est redemandé.
 public struct StoredMedia: Codable, Sendable, Equatable {
     public var kind: MediaItem.Kind
     public var origin: MediaItem.Origin
@@ -53,9 +54,14 @@ public struct StoredMedia: Codable, Sendable, Equatable {
     public var height: Int?
     public var simulated: Bool
     public var hidden: Bool
+    /// Facultatifs : les historiques d'avant D3 ne les ont pas.
+    public var fileID: String?
+    public var expiresAt: Int?
+    public var taskID: String?
 
     public init(kind: MediaItem.Kind, origin: MediaItem.Origin, title: String, localName: String, mime: String,
-                byteCount: Int, width: Int? = nil, height: Int? = nil, simulated: Bool = false, hidden: Bool = false) {
+                byteCount: Int, width: Int? = nil, height: Int? = nil, simulated: Bool = false, hidden: Bool = false,
+                fileID: String? = nil, expiresAt: Int? = nil, taskID: String? = nil) {
         self.kind = kind
         self.origin = origin
         self.title = title
@@ -66,13 +72,16 @@ public struct StoredMedia: Codable, Sendable, Equatable {
         self.height = height
         self.simulated = simulated
         self.hidden = hidden
+        self.fileID = fileID
+        self.expiresAt = expiresAt
+        self.taskID = taskID
     }
 
     init?(_ media: MediaItem) {
         guard media.state == .ready, let localName = media.localName else { return nil }
         self.init(kind: media.kind, origin: media.origin, title: media.title, localName: localName, mime: media.mime,
                   byteCount: media.byteCount, width: media.width, height: media.height, simulated: media.simulated,
-                  hidden: media.hidden)
+                  hidden: media.hidden, fileID: media.fileID, expiresAt: media.expiresAt, taskID: media.taskID)
     }
 }
 
@@ -80,7 +89,8 @@ extension MediaItem {
     init(restoring stored: StoredMedia) {
         self.init(kind: stored.kind, origin: stored.origin, title: stored.title, localName: stored.localName,
                   mime: stored.mime, byteCount: stored.byteCount, width: stored.width, height: stored.height,
-                  simulated: stored.simulated, hidden: stored.hidden)
+                  fileID: stored.fileID, expiresAt: stored.expiresAt, simulated: stored.simulated, taskID: stored.taskID,
+                  hidden: stored.hidden)
     }
 }
 

@@ -116,6 +116,41 @@ public struct AVEFilesClient: Sendable {
         return id
     }
 
+    /// État d'une tâche (D1) : 1 h après son DÉBUT, ou si elle n'existe pas pour cet utilisateur, `notFound`.
+    /// Limite du moteur commune aux routes de fichiers : 20 requêtes d'avance puis 1 toutes les 3 s ; l'appelant espace.
+    public func taskStatus(taskID: String) async throws -> MediaTaskStatus {
+        // L'identifiant vient du réseau : il ne doit rien pouvoir ajouter au chemin.
+        guard !taskID.isEmpty, taskID.count <= 64,
+              taskID.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") })
+        else { throw MediaFileError.badRequest }
+        var request = try await authorizedRequest("GET", path: "v1/tasks/\(taskID)")
+        request.timeoutInterval = 20
+        return try Self.status(from: try await callJSON(request))
+    }
+
+    static func status(from json: [String: Any]) throws -> MediaTaskStatus {
+        switch json["state"] as? String {
+        case "running":
+            return .running
+        case "error":
+            return .failed(code: json["code"] as? String ?? "failed")
+        case "done":
+            guard let taskID = json["task_id"] as? String, let fileID = json["file_id"] as? String,
+                  let mime = json["mime"] as? String, let size = json["size"] as? Int,
+                  let expiresAt = json["expires_at"] as? Int, let url = json["url"] as? String
+            else { throw MediaFileError.unavailable }
+            // Comme pour `task_done` : un `simulated` absent vaut `true` (avertir à tort plutôt que tromper).
+            return .done(MediaTaskResult(taskID: taskID, ref: json["ref"] as? String ?? "",
+                                         kind: (json["kind"] as? String).flatMap { MediaTaskKind(rawValue: $0) },
+                                         fileID: fileID, fileKind: json["file_kind"] as? String ?? "", mime: mime,
+                                         size: size, expiresAt: expiresAt, url: url,
+                                         simulated: json["simulated"] as? Bool ?? true,
+                                         width: json["width"] as? Int, height: json["height"] as? Int))
+        default:
+            throw MediaFileError.unavailable
+        }
+    }
+
     // MARK: Interne
 
     private func authorizedRequest(_ method: String, path: String) async throws -> URLRequest {
@@ -151,7 +186,7 @@ public struct AVEFilesClient: Sendable {
         case "rate_limited": return .rateLimited(retryAfterSeconds: retry)
         case "storage_full": return .storageFull
         case "bad_request": return .badRequest
-        case "file_not_found", "not_found": return .notFound
+        case "file_not_found", "task_not_found", "not_found": return .notFound
         case "reports_disabled": return .reportsDisabled
         default: break
         }

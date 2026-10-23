@@ -101,6 +101,9 @@ public struct MediaTaskCard: Sendable, Equatable {
     public var state: State
     /// Résultat reçu mais pas encore téléchargé (pour réessayer le téléchargement sans refaire la tâche).
     public var pendingResult: MediaTaskResult?
+    /// La session qui attendait la tâche est perdue : ses événements n'arriveront plus, l'app interroge
+    /// `GET /v1/tasks/{task_id}` jusqu'au résultat (D1).
+    public var detached = false
 
     public init(ref: String, request: MediaTaskRequest, sourceMessageID: Int? = nil, resultTitle: String,
                 taskID: String? = nil, state: State = .sending, pendingResult: MediaTaskResult? = nil) {

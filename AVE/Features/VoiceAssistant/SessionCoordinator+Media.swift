@@ -197,6 +197,7 @@ extension SessionCoordinator {
             $0.request = $0.request.replacing(ref: ref)
             $0.taskID = nil
             $0.pendingResult = nil
+            $0.detached = false
             $0.state = .sending
         }
         await send(cardID: messageID)
@@ -233,6 +234,89 @@ extension SessionCoordinator {
         }
         guard let done = transcript.applyTask(event) else { return }
         download(done.result, messageID: done.messageID)
+    }
+
+    // MARK: Reprise après une session perdue (D1)
+
+    /// Nouvelle session (l'ancienne a expiré) : les tâches en cours continuent sur le moteur, mais leurs événements
+    /// sont perdus. Celles qui ont démarré sont suivies par HTTP ; une demande pas encore annoncée est perdue.
+    func detachTasksAfterSessionLoss() {
+        for message in transcript.messages {
+            guard let card = message.task else { continue }
+            switch card.state {
+            case .sending:
+                transcript.updateTask(messageID: message.id) {
+                    $0.state = .failed(code: "connection_lost", retryAfterSeconds: nil)
+                }
+            case .working where card.taskID != nil:
+                transcript.updateTask(messageID: message.id) { $0.detached = true }
+            default:
+                break
+            }
+        }
+        startTaskRecovery()
+    }
+
+    private var detachedTasks: [(messageID: Int, taskID: String)] {
+        transcript.messages.compactMap { message in
+            guard let card = message.task, card.detached, case .working = card.state, let taskID = card.taskID
+            else { return nil }
+            return (message.id, taskID)
+        }
+    }
+
+    private func startTaskRecovery() {
+        guard taskRecovery == nil, media != nil, !detachedTasks.isEmpty else { return }
+        taskRecovery = Task { [weak self] in
+            await self?.runTaskRecovery()
+            self?.taskRecovery = nil
+        }
+    }
+
+    /// Tant qu'une carte attend : une requête par tâche, espacées (limite du moteur), puis une pause. S'arrête de lui-même
+    /// au résultat, à l'échec, ou au bout d'1 h (le moteur répond alors `task_not_found`).
+    private func runTaskRecovery() async {
+        while !Task.isCancelled {
+            let pending = detachedTasks
+            if pending.isEmpty { return }
+            for task in pending {
+                if Task.isCancelled { return }
+                await checkTask(messageID: task.messageID, taskID: task.taskID)
+                try? await Task.sleep(for: configuration.taskRequestSpacing)
+            }
+            try? await Task.sleep(for: configuration.taskPollInterval)
+        }
+    }
+
+    private func checkTask(messageID: Int, taskID: String) async {
+        guard let media else { return }
+        let status: MediaTaskStatus?
+        do {
+            status = try await media.files.taskStatus(taskID: taskID)
+        } catch MediaFileError.notFound {
+            status = nil
+        } catch {
+            return  // réseau, limite du moteur : on réessaie au tour suivant
+        }
+        // La carte a pu changer pendant la requête (annulée, refaite).
+        guard let card = transcript.message(messageID)?.task, card.taskID == taskID, card.detached,
+              case .working = card.state else { return }
+        switch status {
+        case nil:
+            transcript.updateTask(messageID: messageID) { $0.state = .failed(code: "task_expired", retryAfterSeconds: nil) }
+        case .running:
+            break
+        case .done(let result):
+            transcript.updateTask(messageID: messageID) {
+                $0.state = .downloading
+                $0.pendingResult = result
+            }
+            download(result, messageID: messageID)
+        case .failed(let code):
+            transcript.updateTask(messageID: messageID) {
+                $0.state = code == "cancelled" ? .cancelled : .failed(code: code, retryAfterSeconds: nil)
+            }
+        }
     }
 
     // MARK: Interne

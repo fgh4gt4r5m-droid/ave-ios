@@ -102,6 +102,8 @@ public enum UserMessages {
         case "download_failed": return "Le résultat n'a pas pu être téléchargé. Réessayez."
         case "image_unreadable": return "Cette image n'a pas pu être lue. Essayez avec une autre photo."
         case "file_missing": return "Ce fichier n'est plus sur l'iPhone. Joignez-le de nouveau."
+        case "connection_lost": return "La connexion a été coupée pendant l'envoi de la demande. Réessayez."
+        case "task_expired": return "Le résultat n'est plus disponible (il est gardé 1 h). Relancez la demande."
         case "prompt_too_long": return "Description trop longue (1 000 caractères au maximum)."
         default:
             // `engine_unavailable`, `storage_full`, `extraction_unavailable`, `failed` et tout code inconnu.

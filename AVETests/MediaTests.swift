@@ -197,6 +197,37 @@ struct MediaFilesClientTests {
         #expect(server.requests.count == 1)
     }
 
+    @Test("état d'une tâche : les vecteurs `http` du contrat (D1), un par état, et le 404")
+    func taskStatusVectors() async throws {
+        let server = FakeFilesServer()
+        let files = try client(server)
+        server.reply("/v1/tasks/t_44", status: 200,
+                     json: #"{"task_id": "t_44", "ref": "r4", "kind": "image_generate", "state": "running"}"#)
+        #expect(try await files.taskStatus(taskID: "t_44") == .running)
+        server.reply("/v1/tasks/t_44", status: 200, json: #"{"task_id": "t_44", "ref": "r4", "kind": "image_generate", "state": "done", "file_id": "f_a1b2", "file_kind": "jpeg", "mime": "image/jpeg", "size": 2871204, "expires_at": 1792741200, "url": "/v1/files/f_a1b2", "simulated": false, "width": 3840, "height": 2160}"#)
+        #expect(try await files.taskStatus(taskID: "t_44") == .done(MediaTaskResult(
+            taskID: "t_44", ref: "r4", kind: .imageGenerate, fileID: "f_a1b2", fileKind: "jpeg", mime: "image/jpeg",
+            size: 2_871_204, expiresAt: 1_792_741_200, url: "/v1/files/f_a1b2", simulated: false, width: 3840, height: 2160)))
+        server.reply("/v1/tasks/t_46", status: 200, json: #"{"task_id": "t_46", "ref": "r8", "kind": "document_transform", "state": "done", "file_id": "f_c3d4", "file_kind": "txt", "mime": "text/plain; charset=utf-8", "size": 1834, "expires_at": 1792741500, "url": "/v1/files/f_c3d4", "simulated": true}"#)
+        guard case .done(let document) = try await files.taskStatus(taskID: "t_46") else {
+            Issue.record("pas done")
+            return
+        }
+        #expect(document.simulated && document.width == nil && document.mime == "text/plain; charset=utf-8")
+        server.reply("/v1/tasks/t_45", status: 200,
+                     json: #"{"task_id": "t_45", "ref": "r6", "kind": "image_upscale", "state": "error", "code": "content_refused"}"#)
+        #expect(try await files.taskStatus(taskID: "t_45") == .failed(code: "content_refused"))
+        server.reply("/v1/tasks/t_42", status: 200,
+                     json: #"{"task_id": "t_42", "ref": "r1", "kind": "image_generate", "state": "error", "code": "cancelled"}"#)
+        #expect(try await files.taskStatus(taskID: "t_42") == .failed(code: "cancelled"))
+        server.reply("/v1/tasks/t_inconnue", status: 404, json: #"{"error":"task_not_found"}"#)
+        await #expect(throws: MediaFileError.notFound) { _ = try await files.taskStatus(taskID: "t_inconnue") }
+        // Un identifiant venu du réseau ne peut rien ajouter au chemin.
+        let before = server.requests.count
+        await #expect(throws: MediaFileError.badRequest) { _ = try await files.taskStatus(taskID: "../files/f1") }
+        #expect(server.requests.count == before)
+    }
+
     @Test("signalement : 202 → identifiant ; 503 reports_disabled → l'app ne dit pas « envoyé »")
     func report() async throws {
         let server = FakeFilesServer()
@@ -273,9 +304,9 @@ struct MediaTranscriptTests {
         #expect(stored.count == 1)
         #expect(stored.first?.media?.title == "contrat-bail.pdf")
         #expect(ConversationHistory.title(for: stored) == "contrat-bail.pdf")
-        // Rouvert : même fichier, sans file_id (le moteur l'a oublié).
+        // Rouvert : même fichier ; `file_id` gardé même expiré, pour pouvoir encore signaler (D3).
         let restored = ChatTranscript(restoring: stored)
-        #expect(restored.messages.first?.media?.fileID == nil)
+        #expect(restored.messages.first?.media?.fileID == "f1")
         #expect(restored.messages.first?.media?.localName == stored.first?.media?.localName)
         // Historique d'avant les fichiers : pas de champ `media`.
         let old = try JSONDecoder().decode(StoredMessage.self, from: Data(#"{"role":"user","text":"salut","interrupted":false,"voiceOnly":false}"#.utf8))
@@ -450,6 +481,45 @@ struct MediaSessionTests {
         server.reply("/v1/reports", status: 202, json: #"{"report_id":"r1"}"#)
         await c.report(messageID: id, reason: .misleading, note: nil)
         #expect(c.notice == UserMessages.reportSent)
+    }
+
+    @Test("session perdue pendant une tâche : le résultat est repris par HTTP ; une demande non annoncée est perdue")
+    func recoveryAfterSessionLoss() async throws {
+        let server = FakeFilesServer()
+        server.reply("/v1/tasks/t1", status: 200, json: #"{"task_id":"t1","ref":"r","kind":"image_generate","state":"running"}"#)
+        server.reply("/v1/files/f9", status: 200, data: try makePNG(width: 32, height: 32))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ave-media-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let h = try Harness(media: MediaServices(files: try client(server), store: FileMediaStore(directory: dir))) {
+            $0.taskPollInterval = .milliseconds(20)
+            $0.taskRequestSpacing = .milliseconds(1)
+        }
+        let c = h.coordinator
+        let t0 = try await h.open()
+        await c.createImage(prompt: "Un marché", size: .square, quality: .hd)
+        await c.createImage(prompt: "Une plage", size: .square, quality: .hd)
+        let refs = t0.sentJSON.filter { $0["type"] as? String == "image_generate" }.compactMap { $0["ref"] as? String }
+        #expect(refs.count == 2)
+        let started = try #require(refs.first)
+        t0.serverSend(#"{"type":"task_started","seq":1,"task_id":"t1","ref":"\#(started)","kind":"image_generate","estimated_s":35}"#)
+        let cards = c.transcript.messages.filter { $0.task != nil }.map(\.id)
+        let first = try #require(cards.first)
+        let second = try #require(cards.last)
+        #expect(await eventually { await c.transcript.message(first)?.task?.taskID == "t1" })
+
+        // La session expire : le moteur en ouvre une nouvelle, sans les événements de l'ancienne.
+        t0.serverDrop()
+        let t1 = try #require(await h.factory.waitForTransport(1))
+        t1.serverReady(session: "autre", resumed: false)
+        #expect(await eventually { await c.transcript.message(second)?.task?.state == .failed(code: "connection_lost", retryAfterSeconds: nil) })
+        #expect(await eventually { server.requests.contains { $0.url?.path == "/v1/tasks/t1" } })
+        #expect(c.transcript.message(first)?.task?.detached == true)
+
+        server.reply("/v1/tasks/t1", status: 200, json: #"{"task_id":"t1","ref":"r","kind":"image_generate","state":"done","file_id":"f9","file_kind":"png","mime":"image/png","size":100,"expires_at":4000000000,"url":"/v1/files/f9","simulated":true,"width":32,"height":32}"#)
+        #expect(await eventually { await c.transcript.message(first)?.media?.kind == .image })
+        #expect(c.transcript.message(first)?.media?.simulated == true)
+        #expect(c.transcript.message(first)?.task == nil)
+        await c.stop()
     }
 
     @Test("hors ligne : la demande n'est pas mise en file, la carte propose de réessayer")
