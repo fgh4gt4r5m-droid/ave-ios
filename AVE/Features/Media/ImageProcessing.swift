@@ -66,8 +66,15 @@ public enum ImageProcessing {
         case .landscape: ratio = 16.0 / 9.0
         }
         let w = Double(width), h = Double(height)
-        let cropW = min(w, (h * ratio).rounded(.down))
-        let cropH = min(h, (cropW / ratio).rounded(.down))
+        // Le côté qui limite reste entier : recalculer la hauteur depuis une largeur déjà arrondie ferait perdre un pixel.
+        let cropW: Double, cropH: Double
+        if w / h > ratio {
+            cropH = h
+            cropW = (h * ratio).rounded(.down)
+        } else {
+            cropW = w
+            cropH = (w / ratio).rounded(.down)
+        }
         return CGRect(x: ((w - cropW) / 2).rounded(.down), y: ((h - cropH) / 2).rounded(.down), width: cropW, height: cropH)
     }
 
