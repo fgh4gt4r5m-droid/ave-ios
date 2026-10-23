@@ -14,4 +14,17 @@ public protocol AccountsAPI: Sendable {
     func accessToken(refreshToken: String) async throws -> AccessToken
     func signOut(refreshToken: String) async throws
     func deleteAccount(refreshToken: String) async throws
+    /// Profil du compte (nom complet, conditions, âge).
+    func profile(refreshToken: String) async throws -> AccountProfile
+    /// Champs `nil` : inchangés. `adultConfirmed` ne s'envoie qu'à `true`.
+    func updateProfile(refreshToken: String, fullName: String?, termsVersion: String?, adultConfirmed: Bool?)
+        async throws -> AccountProfile
+}
+
+extension AccountsAPI {
+    /// Service sans profil (app hôte, faux service de test) : l'app ne peut rien relire ni enregistrer.
+    public func profile(refreshToken: String) async throws -> AccountProfile { throw AuthError.unavailable }
+
+    public func updateProfile(refreshToken: String, fullName: String?, termsVersion: String?, adultConfirmed: Bool?)
+        async throws -> AccountProfile { throw AuthError.unavailable }
 }

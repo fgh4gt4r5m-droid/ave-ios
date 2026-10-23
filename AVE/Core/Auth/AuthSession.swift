@@ -81,6 +81,27 @@ public actor AuthSession {
         }
     }
 
+    /// Profil du compte connecté. Un jeton long révoqué déconnecte l'appareil, comme pour les jetons courts.
+    public func profile() async throws -> AccountProfile {
+        guard let credentials else { throw AuthError.signedOut }
+        do { return try await api.profile(refreshToken: credentials.refreshToken) } catch AuthError.signedOut {
+            clear()
+            throw AuthError.signedOut
+        }
+    }
+
+    public func updateProfile(fullName: String? = nil, termsVersion: String? = nil, adultConfirmed: Bool? = nil)
+        async throws -> AccountProfile {
+        guard let credentials else { throw AuthError.signedOut }
+        do {
+            return try await api.updateProfile(refreshToken: credentials.refreshToken, fullName: fullName,
+                                               termsVersion: termsVersion, adultConfirmed: adultConfirmed)
+        } catch AuthError.signedOut {
+            clear()
+            throw AuthError.signedOut
+        }
+    }
+
     /// Déconnexion : le serveur est prévenu au mieux, mais l'appareil est TOUJOURS déconnecté.
     public func signOut() async {
         if let credentials { try? await api.signOut(refreshToken: credentials.refreshToken) }

@@ -25,6 +25,8 @@ public final class SignInViewModel {
     public var countryCode: String?
     /// Moment de l'envoi du dernier code : pour afficher le décompte avant de pouvoir en redemander un.
     public private(set) var codeSentAt: Date?
+    /// Nom complet donné par Apple (seulement à la toute première connexion) : il pré-remplit l'écran du nom.
+    public private(set) var suggestedFullName: String?
 
     /// Longueur des codes du service de comptes.
     public static let codeLength = 6
@@ -112,7 +114,9 @@ public final class SignInViewModel {
     }
 
     /// `rawNonce` : le nonce brut dont le SHA-256 a été donné à Apple (le service le revérifie).
-    public func signInWithApple(identityToken: String, rawNonce: String, authorizationCode: String? = nil) async {
+    public func signInWithApple(identityToken: String, rawNonce: String, authorizationCode: String? = nil,
+                                fullName: String? = nil) async {
+        if let fullName { suggestedFullName = fullName }
         await run {
             let credentials = try await self.api.signInWithApple(identityToken: identityToken, rawNonce: rawNonce,
                                                                  authorizationCode: authorizationCode)

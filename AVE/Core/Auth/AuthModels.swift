@@ -26,6 +26,21 @@ public struct AccessToken: Sendable, Equatable {
     }
 }
 
+/// Profil du compte (`GET`/`PATCH /account/profile` du service de comptes, 2026-10-23) : relu à chaque connexion pour
+/// ne pas redemander ce qui a déjà été donné (réinstallation, autre iPhone).
+public struct AccountProfile: Sendable, Equatable {
+    public var fullName: String?
+    /// Version des conditions acceptées (`Terms.currentVersion`) ; `nil` : jamais acceptées.
+    public var termsVersion: String?
+    public var adultConfirmed: Bool
+
+    public init(fullName: String? = nil, termsVersion: String? = nil, adultConfirmed: Bool = false) {
+        self.fullName = fullName
+        self.termsVersion = termsVersion
+        self.adultConfirmed = adultConfirmed
+    }
+}
+
 public struct OTPChallenge: Sendable, Equatable {
     public let id: String
     public let retryAfterSeconds: Int?
@@ -60,6 +75,8 @@ public enum AuthError: Error, Equatable, Sendable {
     /// Le jeton de rafraîchissement n'est plus valable : il faut se reconnecter.
     case signedOut
     case guestUnsupported
+    /// Nom refusé par le service (vide, trop long, caractère invisible).
+    case invalidName
     case network
     case unavailable
 }

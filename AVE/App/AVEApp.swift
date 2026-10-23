@@ -30,11 +30,17 @@ struct RootView: View {
     @State private var mediaStore: (any MediaStore)? = FileMediaStore.standard()
     @State private var conversations: [StoredConversation] = []
     @State private var currentConversationID: UUID?
+    /// Ce qu'il reste à demander après la connexion ; `nil` : en cours de vérification.
+    @State private var entryStep: EntryFlow.Step?
 
     // Réglages, gardés sur l'iPhone (UserDefaults).
     @AppStorage("onboarding.done") private var onboardingDone = false
     @AppStorage("language.code") private var languageCode = AVELanguage.french.rawValue
     @AppStorage("profile.firstName") private var firstName = ""
+    /// Entrée (validée le 2026-10-23) : nom complet et version des conditions acceptées, gardés aussi sur l'iPhone pour ne
+    /// rien attendre du réseau au lancement ; le service de comptes fait foi à la connexion.
+    @AppStorage("profile.fullName") private var fullName = ""
+    @AppStorage("terms.acceptedVersion") private var acceptedTerms = ""
     @AppStorage("pref.autoPlay") private var autoPlay = true
     @AppStorage("pref.captions") private var captions = true
     @AppStorage("pref.haptics") private var haptics = true
@@ -52,6 +58,8 @@ struct RootView: View {
                     language = AVELanguageSelection(language: chosen)
                     onboardingDone = true
                 }
+            } else if case .signedIn(let kind) = authState, let session, entryStep != .done {
+                entryScreen(kind: kind, session: session)
             } else if case .signedIn(let kind) = authState, let coordinator, let session {
                 signedIn(coordinator: coordinator, session: session, kind: kind)
             } else if case .signedIn = authState {
@@ -76,6 +84,71 @@ struct RootView: View {
         // Apparence du système par défaut (claire ou sombre), ou celle choisie dans les réglages.
         .environment(\.aveTheme, .ave)
         .preferredColorScheme(appearance.colorScheme)
+    }
+
+    // MARK: Entrée : nom complet, puis âge et conditions
+
+    @ViewBuilder private func entryScreen(kind: AccountKind, session: AuthSession) -> some View {
+        switch entryStep {
+        case nil:
+            loadingMark.task(id: kind) { await resolveEntry(kind: kind, session: session) }
+        case .name(let suggestion):
+            EntryNameView(suggestion: suggestion) { name in await saveName(name, kind: kind, session: session) }
+        case .terms:
+            EntryTermsView { await acceptTerms(session: session) }
+        case .done:
+            loadingMark
+        }
+    }
+
+    private var localTerms: String? { acceptedTerms.isEmpty ? nil : acceptedTerms }
+
+    private func resolveEntry(kind: AccountKind, session: AuthSession) async {
+        let suggestion = signIn?.suggestedFullName
+        // Déjà fait sur cet iPhone : rien à attendre du réseau.
+        if EntryFlow.next(kind: kind, profile: nil, localFullName: fullName, localTermsVersion: localTerms) == .done {
+            entryStep = .done
+            return
+        }
+        // Réinstallation ou autre iPhone : le profil du compte évite de redemander. Hors ligne : on demande, et
+        // l'enregistrement dira s'il faut réessayer.
+        let profile = try? await session.profile()
+        if let name = profile?.fullName, !name.isEmpty {
+            fullName = name
+            firstName = EntryFlow.firstName(of: name)
+        }
+        if let profile, profile.termsVersion == Terms.currentVersion, profile.adultConfirmed {
+            acceptedTerms = Terms.currentVersion
+        }
+        entryStep = EntryFlow.next(kind: kind, profile: profile, localFullName: fullName, localTermsVersion: localTerms,
+                                   suggestedName: suggestion)
+    }
+
+    private func saveName(_ name: String, kind: AccountKind, session: AuthSession) async -> String? {
+        do {
+            _ = try await session.updateProfile(fullName: name)
+        } catch let error as AuthError {
+            return AuthMessages.message(for: error)
+        } catch {
+            return AuthMessages.message(for: .unavailable)
+        }
+        fullName = name
+        firstName = EntryFlow.firstName(of: name)
+        entryStep = EntryFlow.next(kind: kind, profile: nil, localFullName: name, localTermsVersion: localTerms)
+        return nil
+    }
+
+    private func acceptTerms(session: AuthSession) async -> String? {
+        do {
+            _ = try await session.updateProfile(termsVersion: Terms.currentVersion, adultConfirmed: true)
+        } catch let error as AuthError {
+            return AuthMessages.message(for: error)
+        } catch {
+            return AuthMessages.message(for: .unavailable)
+        }
+        acceptedTerms = Terms.currentVersion
+        entryStep = .done
+        return nil
     }
 
     // MARK: Écran connecté : conversation + historique
@@ -268,6 +341,11 @@ struct RootView: View {
                     if let coordinator { await coordinator.stop() }
                     coordinator = nil
                     currentConversationID = nil
+                    // Une autre personne peut se connecter sur cet iPhone : son nom et son accord lui seront demandés.
+                    entryStep = nil
+                    fullName = ""
+                    firstName = ""
+                    acceptedTerms = ""
                     signIn?.back()
                 }
             }

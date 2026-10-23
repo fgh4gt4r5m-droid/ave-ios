@@ -126,7 +126,8 @@ struct RightsSheet: View {
     }
 }
 
-/// Rien n'est coché d'avance (CGU §2 : retoucher la photo d'une personne réelle exige son accord).
+/// Rien n'est acquis d'avance (CGU §2 : retoucher la photo d'une personne réelle exige son accord). Interrupteur du
+/// système : le propriétaire exige les composants natifs d'iOS, et le HIG préfère l'interrupteur à la case sur iOS.
 struct RightsToggle: View {
     @Binding var isOn: Bool
 
@@ -134,25 +135,6 @@ struct RightsToggle: View {
         Toggle(isOn: $isOn) {
             Text(UserMessages.rightsConfirmation).font(.subheadline)
         }
-        .toggleStyle(CheckboxToggleStyle())
-    }
-}
-
-/// Case à cocher (iOS n'en a pas en standard) : toute la ligne est touchable, VoiceOver la lit comme un interrupteur.
-struct CheckboxToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button { configuration.isOn.toggle() } label: {
-            HStack(alignment: .top, spacing: 12) {
-                configuration.label.frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                    .font(.title3)
-                    .foregroundStyle(configuration.isOn ? Color.accentColor : .secondary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityValue(configuration.isOn ? "Coché" : "Non coché")
     }
 }
 

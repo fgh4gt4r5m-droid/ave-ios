@@ -31,5 +31,26 @@ struct DevAccountsAPI: AccountsAPI {
     }
 
     func signOut(refreshToken: String) async throws {}
-    func deleteAccount(refreshToken: String) async throws {}
+    func deleteAccount(refreshToken: String) async throws { DevProfileStore.shared.set(AccountProfile()) }
+
+    // Profil gardé en mémoire le temps du lancement : l'entrée (nom, âge, conditions) se parcourt comme en vrai.
+    func profile(refreshToken: String) async throws -> AccountProfile { DevProfileStore.shared.get() }
+
+    func updateProfile(refreshToken: String, fullName: String?, termsVersion: String?, adultConfirmed: Bool?)
+        async throws -> AccountProfile {
+        var profile = DevProfileStore.shared.get()
+        if let fullName { profile.fullName = fullName }
+        if let termsVersion { profile.termsVersion = termsVersion }
+        if adultConfirmed == true { profile.adultConfirmed = true }
+        DevProfileStore.shared.set(profile)
+        return profile
+    }
+}
+
+private final class DevProfileStore: @unchecked Sendable {
+    static let shared = DevProfileStore()
+    private let lock = NSLock()
+    private var profile = AccountProfile()
+    func get() -> AccountProfile { lock.withLock { profile } }
+    func set(_ new: AccountProfile) { lock.withLock { profile = new } }
 }

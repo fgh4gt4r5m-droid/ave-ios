@@ -67,6 +67,24 @@ public struct HTTPAccountsAPI: AccountsAPI {
         _ = try await call("DELETE", "account", bearer: refreshToken)
     }
 
+    public func profile(refreshToken: String) async throws -> AccountProfile {
+        Self.profile(from: try await call("GET", "account/profile", bearer: refreshToken))
+    }
+
+    public func updateProfile(refreshToken: String, fullName: String?, termsVersion: String?, adultConfirmed: Bool?)
+        async throws -> AccountProfile {
+        var body: [String: Any] = [:]
+        if let fullName { body["full_name"] = fullName }
+        if let termsVersion { body["terms_version"] = termsVersion }
+        if adultConfirmed == true { body["adult_confirmed"] = true }
+        return Self.profile(from: try await call("PATCH", "account/profile", body: body, bearer: refreshToken))
+    }
+
+    static func profile(from json: [String: Any]) -> AccountProfile {
+        AccountProfile(fullName: json["full_name"] as? String, termsVersion: json["terms_version"] as? String,
+                       adultConfirmed: json["adult_confirmed"] as? Bool ?? false)
+    }
+
     // MARK: Interne
 
     /// Les réponses de connexion portent `refresh_token`. Sans lui, la réponse est inutilisable.
@@ -108,6 +126,7 @@ public struct HTTPAccountsAPI: AccountsAPI {
             case "invalid_code": throw AuthError.invalidCode
             case "wrong_code": throw AuthError.wrongCode
             case "guest_unsupported": throw AuthError.guestUnsupported
+            case "invalid_name": throw AuthError.invalidName
             default: throw AuthError.rejected
             }
         default:

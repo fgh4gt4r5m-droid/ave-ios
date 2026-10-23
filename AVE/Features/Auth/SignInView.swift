@@ -43,18 +43,18 @@ public struct SignInView: View {
 
     // MARK: Accueil
 
-    /// Connexion (maquette d'entrée validée le 2026-10-23) : le logo au repos, un titre, et les deux connexions au même
-    /// niveau (exigé par Apple) ; « Essayer sans compte » reste discret.
+    /// Bienvenue (maquette « Entrée dans AVE » validée le 2026-10-23) : le logo au repos, un titre, une phrase, et les deux
+    /// connexions au même niveau (exigé par Apple) ; « Essayer sans compte » reste discret. Le texte juridique est passé
+    /// sur « Avant de commencer », avec ses deux engagements explicites.
     private var welcome: some View {
         VStack(spacing: 16) {
             Spacer()
             AVELiveMark(phase: .idle).frame(width: 96, height: 96)
             VStack(spacing: 8) {
-                Text("Connectez-vous")
+                Text("Bienvenue sur AVE")
                     .font(.title.weight(.bold))
                     .accessibilityAddTraits(.isHeader)
-                // Ce qu'un compte apporte vraiment, sans rien promettre de plus.
-                Text("Avec votre numéro ou votre compte Apple. Vous pourrez supprimer votre compte à tout moment.")
+                Text("Parlez ou écrivez : AVE vous aide au quotidien.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -65,7 +65,7 @@ public struct SignInView: View {
                 primaryButton("Continuer avec mon numéro", systemImage: "phone.fill") { model.choosePhone() }
                 SignInWithAppleButton(.continue) { request in
                     appleNonce = Self.randomNonce()
-                    request.requestedScopes = []  // ni nom ni e-mail : on n'en a pas besoin
+                    request.requestedScopes = [.fullName]  // pré-remplit l'écran du nom ; pas d'e-mail : inutile
                     request.nonce = Self.sha256Hex(appleNonce)
                 } onCompletion: { result in
                     switch result {
@@ -78,7 +78,12 @@ public struct SignInView: View {
                         let nonce = appleNonce
                         // Code d'autorisation : permet au service de révoquer le jeton Apple si le compte est supprimé.
                         let code = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
-                        Task { await model.signInWithApple(identityToken: token, rawNonce: nonce, authorizationCode: code) }
+                        let name = EntryFlow.appleName(given: credential.fullName?.givenName,
+                                                       family: credential.fullName?.familyName)
+                        Task {
+                            await model.signInWithApple(identityToken: token, rawNonce: nonce, authorizationCode: code,
+                                                        fullName: name)
+                        }
                     case .failure(let error):
                         if (error as? ASAuthorizationError)?.code == .canceled { model.appleCancelled() } else { model.appleFailed() }
                     }
@@ -94,10 +99,6 @@ public struct SignInView: View {
                         .tint(theme.accent)
                 }
             }
-            Text("En continuant, vous acceptez les conditions d'utilisation et la politique de confidentialité.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 12)
@@ -188,7 +189,7 @@ public struct SignInView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)
-        .navigationTitle("Code reçu")
+        .navigationTitle("Entrez le code")
         .onAppear { fieldFocused = true }
         .onChange(of: model.codeInput) { _, _ in
             if model.codeDidChange() { Task { await model.verifyCode() } }
