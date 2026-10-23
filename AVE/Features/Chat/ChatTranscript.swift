@@ -47,6 +47,22 @@ public struct ChatTranscript: Sendable, Equatable {
 
     public init() {}
 
+    /// Fil rouvert depuis l'historique : messages terminés, sans `utterance_id` (ils n'appartiennent à aucune session du
+    /// moteur : pas d'avis 👍/👎 possible dessus), suivis d'un message système qui dit que l'assistant repart sans mémoire.
+    public init(restoring stored: [StoredMessage], notice: String? = nil) {
+        for message in stored {
+            let role: ChatMessage.Role
+            switch message.role {
+            case .user: role = .user
+            case .assistant: role = .assistant
+            case .system: role = .system
+            }
+            append(role: role, text: message.text, status: message.interrupted ? .interrupted : .complete,
+                   voiceOnly: message.voiceOnly)
+        }
+        if let notice, !stored.isEmpty { appendSystem(notice) }
+    }
+
     public mutating func appendSystem(_ text: String) {
         append(role: .system, text: text, status: .complete)
     }

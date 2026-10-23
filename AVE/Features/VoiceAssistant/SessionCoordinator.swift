@@ -6,6 +6,12 @@ public enum SessionMode: Sendable, Equatable {
     case voice, text
 }
 
+/// Message écrit hors connexion : affiché « en attente » et envoyé tout seul au retour du réseau (3G instable).
+public struct PendingText: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public let text: String
+}
+
 /// Une session AVE, deux modes (voix / texte). Relie le client WebSocket, l'audio, la machine du
 /// barge-in et la conversation. Passer de la voix au texte coupe le micro mais NE ferme PAS la session.
 @MainActor
@@ -52,6 +58,12 @@ public final class SessionCoordinator {
     /// Messages ayant déjà reçu un 👍/👎 pendant cette session.
     public private(set) var feedbackGiven: Set<Int> = []
     public private(set) var selectedLanguage: AVELanguage
+    /// Messages écrits hors connexion, dans l'ordre, envoyés dès que la session est rouverte.
+    public private(set) var pendingTexts: [PendingText] = []
+    /// Micro coupé en mode vocal (sans quitter le mode vocal) : rien n'est capté ni envoyé.
+    public private(set) var micMuted = false
+    /// Réglage « Lire les réponses à voix haute » en mode texte. L'audio est TOUJOURS gardé pour « Lire à voix haute ».
+    public var autoPlayInTextMode = true
     /// Type de compte de l'app AVE (`nil` : app hôte, WoYo/TaGa…). Un INVITÉ n'est pas sollicité pour l'apprentissage : sa clé de
     /// consentement ne vit que le temps de la session, donc « effacer mes données » ne pourrait pas être tenu pour les sessions passées.
     public var accountKind: AccountKind? {
@@ -93,7 +105,8 @@ public final class SessionCoordinator {
     public init(client: AVEWebSocketClient, devices: AudioDevices, mode: SessionMode = .voice,
                 configuration: Configuration = Configuration(), activity: (any SessionActivityPresenting)? = nil,
                 language: AVELanguage = .french, learningPreferences: any LearningPreferences = InMemoryLearningPreferences(),
-                accountKind: AccountKind? = nil) {
+                accountKind: AccountKind? = nil, transcript: ChatTranscript = ChatTranscript()) {
+        self.transcript = transcript
         self.activity = activity
         self.accountKind = accountKind
         self.selectedLanguage = language
@@ -161,7 +174,37 @@ public final class SessionCoordinator {
             mode = .text
         } else {
             mode = .voice
+            micMuted = false
             await startMic()
+        }
+    }
+
+    /// Couper ou rouvrir le micro sans quitter le mode vocal (bruit, quelqu'un arrive).
+    public func setMicMuted(_ muted: Bool) async {
+        guard mode == .voice, muted != micMuted else { return }
+        micMuted = muted
+        if muted {
+            await closeUserTurnIfOpen()
+            stopMic()
+        } else {
+            await startMic()
+        }
+    }
+
+    /// « Réessayer » sur une réponse : renvoie la question qui la précède.
+    public func retry(messageID: Int) async {
+        let messages = transcript.messages
+        guard let index = messages.firstIndex(where: { $0.id == messageID }),
+              let question = messages[..<index].last(where: { $0.role == .user }) else { return }
+        await sendText(question.text)
+    }
+
+    /// Envoie dans l'ordre les messages écrits hors connexion ; s'arrête au premier refus (connexion de nouveau perdue).
+    private func flushPendingTexts() async {
+        while let next = pendingTexts.first {
+            guard await client.sendText(next.text) else { return }
+            pendingTexts.removeFirst()
+            await perform(machine.handle(.userSentText))
         }
     }
 
@@ -184,11 +227,13 @@ public final class SessionCoordinator {
             notice = UserMessages.textTooLong
             return
         }
-        if await client.sendText(trimmed) {
+        // Des messages attendent déjà : celui-ci passe après eux, pour garder l'ordre.
+        if pendingTexts.isEmpty, await client.sendText(trimmed) {
             if replayingMessageID != nil { stopReplay() }
             await perform(machine.handle(.userSentText))
         } else {
-            notice = UserMessages.notConnected
+            // Hors connexion : rien n'est perdu ; le message est montré « en attente » et part au retour du réseau.
+            pendingTexts.append(PendingText(id: UUID(), text: trimmed))
         }
     }
 
@@ -394,6 +439,7 @@ public final class SessionCoordinator {
             case .open(let resumed):
                 if !resumed && hasBeenOpen { notice = UserMessages.sessionRestarted }
                 hasBeenOpen = true
+                await flushPendingTexts()
             case .failed(let error):
                 notice = UserMessages.fatal(error)
                 await perform(machine.handle(.sessionLost))
@@ -473,8 +519,8 @@ public final class SessionCoordinator {
 
     private func handleAudio(_ data: Data) {
         guard machine.acceptsTTSAudio else { return }  // reliquat d'un énoncé annulé
-        utteranceChunks.append(data)
-        devices.player.enqueue(data)
+        utteranceChunks.append(data)  // gardé dans tous les cas : « Lire à voix haute » le rejouera
+        if mode == .voice || autoPlayInTextMode || speakingFor != nil { devices.player.enqueue(data) }
     }
 
     // MARK: Session audio (appel entrant, débranchement…)
@@ -487,12 +533,12 @@ public final class SessionCoordinator {
             await interruptAssistant()
             devices.player.purge()
         case .interruptionEnded(let shouldResume):
-            if shouldResume, (try? devices.lifecycle.activate()) != nil, mode == .voice { await startMic() }
+            if shouldResume, (try? devices.lifecycle.activate()) != nil, mode == .voice, !micMuted { await startMic() }
         case .routeChanged(_, let reason):
             if reason == .oldDeviceUnavailable { await interruptAssistant() }
         case .mediaServicesReset:
             stopMic()
-            if (try? devices.lifecycle.activate()) != nil, mode == .voice { await startMic() }
+            if (try? devices.lifecycle.activate()) != nil, mode == .voice, !micMuted { await startMic() }
         }
     }
 

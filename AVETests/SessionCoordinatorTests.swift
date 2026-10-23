@@ -199,10 +199,10 @@ struct SessionCoordinatorTests {
         t.serverSend(audio: 5, Data([4, 2]))
         t.serverSend(#"{"type":"tts_end","seq":6,"utterance_id":6,"interrupted":false}"#)
         t.serverSend(#"{"type":"turn_end","seq":7,"utterance_id":6,"interrupted":false}"#)
-        #expect(await eventually { h.coordinator.hasCachedAudio(for: assistant.id) })
+        #expect(await eventually { await h.coordinator.hasCachedAudio(for: assistant.id) })
         #expect(h.coordinator.transcript.messages.count == 2)      // pas de bulle « Réponse vocale » en plus
         #expect(h.player.enqueued == [Data([4, 2])])
-        #expect(await eventually { h.coordinator.replayingMessageID == nil })
+        #expect(await eventually { await h.coordinator.replayingMessageID == nil })
         await h.coordinator.stop()
     }
 
@@ -214,7 +214,7 @@ struct SessionCoordinatorTests {
         t.serverSend(#"{"type":"transcript","seq":1,"text":"x","lang":"fra","confidence":1,"speculative":false,"source":"text"}"#)
         t.serverSend(#"{"type":"reply_text","seq":2,"utterance_id":5,"text":"\#(long)","lang":"fra"}"#)
         t.serverSend(#"{"type":"turn_end","seq":3,"utterance_id":5,"interrupted":false}"#)
-        #expect(await eventually { h.coordinator.transcript.messages.count >= 2 })
+        #expect(await eventually { await h.coordinator.transcript.messages.count >= 2 })
         let assistant = try #require(h.coordinator.transcript.messages.last)
         #expect(!h.coordinator.canReadAloud(messageID: assistant.id))
         await h.coordinator.readAloud(messageID: assistant.id)
@@ -303,11 +303,17 @@ struct SessionCoordinatorTests {
         await h.coordinator.stop()
     }
 
-    @Test("texte hors ligne : message non perdu en silence, l'utilisateur est prévenu")
+    @Test("texte hors ligne : message gardé « en attente », envoyé dans l'ordre au retour du réseau")
     func textOffline() async throws {
-        let h = try Harness()  // jamais démarré : pas de session prête
+        let h = try Harness()  // pas encore démarré : pas de session prête
         await h.coordinator.sendText("salut")
-        #expect(h.coordinator.notice == UserMessages.notConnected)
+        await h.coordinator.sendText("ça va ?")
+        #expect(h.coordinator.pendingTexts.map(\.text) == ["salut", "ça va ?"])
+        #expect(h.coordinator.notice == nil)
+        let t = try await h.open()
+        #expect(await eventually { await h.coordinator.pendingTexts.isEmpty })
+        let sent = t.sentJSON.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }
+        #expect(sent == ["salut", "ça va ?"])
         let tooLong = String(repeating: "a", count: 4001)
         await h.coordinator.sendText(tooLong)
         #expect(h.coordinator.notice == UserMessages.textTooLong)

@@ -15,6 +15,10 @@ struct MessageBubble: View {
     let onReplay: () -> Void
     let onConfirm: () -> Void
     let onDecline: () -> Void
+    /// « Réessayer » (réponse de l'assistant) : renvoie la question précédente.
+    var onRetry: (() -> Void)?
+    /// « Modifier » (question de la personne) : la remet dans la barre de saisie.
+    var onEdit: (() -> Void)?
 
     @Environment(\.aveTheme) private var theme
     @State private var copied = false
@@ -39,9 +43,10 @@ struct MessageBubble: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
                 .background(theme.userBubble, in: .rect(cornerRadius: theme.cornerRadius))
+                // Appui long : menu natif d'iOS (copier, modifier, partager), comme ChatGPT et Claude.
+                .contextMenu { userMenu }
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.leading, 48)
-                .textSelection(.enabled)
                 .accessibilityLabel("Vous : \(message.text)")
         case .assistant:
             if let card = message.card {
@@ -58,9 +63,9 @@ struct MessageBubble: View {
                 Label("Réponse vocale", systemImage: "waveform")
                     .foregroundStyle(.secondary)
             } else {
-                Text(message.text)
+                RichText(text: message.text)
                     .foregroundStyle(theme.assistantBubbleText)
-                    .textSelection(.enabled)
+                    .contextMenu { assistantMenu }
             }
             if message.status == .interrupted {
                 Label("Interrompu", systemImage: "hand.raised.fill")
@@ -89,6 +94,19 @@ struct MessageBubble: View {
                            label: isReplaying ? "Lecture en cours" : "Lire à voix haute", action: onReplay)
                     .disabled(isReplaying)
             }
+            if !message.isVoiceOnly, !message.text.isEmpty {
+                ShareLink(item: message.text) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Partager")
+            }
+            if let onRetry {
+                iconButton("arrow.clockwise", label: "Réessayer", action: onRetry)
+            }
             if canFeedback, message.utteranceID != nil {
                 if feedbackSent {
                     Text(UserMessages.feedbackThanks).font(.footnote).foregroundStyle(.secondary).padding(.leading, 8)
@@ -99,6 +117,19 @@ struct MessageBubble: View {
             }
         }
         .padding(.leading, -12)  // aligne l'icône (et non sa zone tactile) sur le texte
+    }
+
+    @ViewBuilder private var userMenu: some View {
+        Button("Copier", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.text }
+        if let onEdit { Button("Modifier", systemImage: "pencil", action: onEdit) }
+        ShareLink("Partager", item: message.text)
+    }
+
+    @ViewBuilder private var assistantMenu: some View {
+        Button("Copier", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.text }
+        if canReadAloud { Button("Lire à voix haute", systemImage: "speaker.wave.2", action: onReplay) }
+        ShareLink("Partager", item: message.text)
+        if let onRetry { Button("Réessayer", systemImage: "arrow.clockwise", action: onRetry) }
     }
 
     private func iconButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {

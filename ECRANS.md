@@ -1,6 +1,20 @@
 # Écrans (étape 4) : décisions et limites
 
 ## Structure
+- **Proposition 2 (validée le 2026-10-23)** — galerie : https://claude.ai/artifact/KVa5A58yaBPxPvL8TUNYrG
+  - Premier lancement (`Features/Onboarding`) : promesse + choix de la langue avant la connexion.
+  - Historique LOCAL (`Features/History`) : `FileConversationStore` (JSON par conversation, Application Support, protégé par
+    iOS, exclu des sauvegardes), titre automatique, regroupement par date, recherche, renommer, supprimer, tout effacer.
+    Rouvrir = réafficher ; l'assistant repart SANS mémoire (nouvelle session) et l'app le dit (`resumedWithoutMemory`).
+  - Accueil : salutation (prénom facultatif, gardé sur l'iPhone) + 4 suggestions (débuts de phrase, ou mode vocal).
+  - Réponses mises en forme (`MarkdownBlocks` pur et testé + `RichText`), actions copier / lire / partager / réessayer /
+    avis, appui long = menu natif (copier, modifier ma question, lire, partager).
+  - Hors connexion : `SessionCoordinator.pendingTexts`, bulles « en attente », envoi dans l'ordre au retour du réseau.
+  - Mode vocal : sous-titres en direct, micro coupé (`setMicMuted`), interrompre, terminer.
+  - Réglages (`Features/Settings`, remplace « Mon compte ») : prénom, langue, lecture auto (`autoPlayInTextMode`, l'audio
+    reste gardé), sous-titres, vibrations, thème, historique, aide à l'amélioration, compte, version.
+  - Raccourcis : App Intent « Parler à AVE » (Siri, Spotlight, Raccourcis, bouton Action). **Pas encore** : widget et
+    commande du Centre de contrôle (extension, même intention) ; pièces jointes (protocole du moteur à prévoir d'abord).
 - `Features/VoiceAssistant/SessionCoordinator` : une session, deux modes. Relie client WebSocket, audio, machine du
   barge-in, VAD et conversation. Basculer voix ↔ texte coupe le micro, jamais la session.
 - **Standards ChatGPT / Claude / Gemini (2026-10-23, après essai sur iPhone)** : couleurs et fonds du SYSTÈME (clair et
