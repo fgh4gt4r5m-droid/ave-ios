@@ -141,11 +141,8 @@ public enum UserMessages {
     /// Mention obligatoire tant que le moteur est factice (`simulated: true`).
     public static let simulatedImage = "Le moteur d'images n'est pas encore branché : ceci n'est pas une vraie image."
     public static let simulatedDocument = "Document de démonstration : le texte est renvoyé tel quel, sans traitement réel."
-    public static let generatedByAI = "Générée par IA"
     public static let simulatedBadge = "Image de démonstration"
     public static let mediaUnavailable = "Les fichiers et les images ne sont pas disponibles dans cette version."
-    public static let imageCreationHint =
-        "Créée par une IA. Les personnages imaginaires, même photoréalistes, sont possibles ; une personne réelle nommée, non."
     /// Case d'accord des CGU (`CGU-CONTENUS-IA.md` §2) : retoucher la photo d'une personne réelle exige son accord.
     public static let rightsConfirmation = "Je confirme être sur cette photo, ou avoir l'accord des personnes présentes."
     public static let fileForgotten = "La photo est oubliée par le serveur au bout d'1 h."

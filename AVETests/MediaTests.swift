@@ -531,3 +531,28 @@ struct MediaSessionTests {
         #expect(c.transcript.messages.last?.task?.state == .failed(code: "network", retryAfterSeconds: nil))
     }
 }
+
+@Suite("Créer une image dans la conversation (maquette validée le 2026-10-24)")
+struct ImageInConversationTests {
+    @Test("légende sous la description : format et qualité, défauts du moteur ; rien pour une autre tâche")
+    func caption() {
+        #expect(MediaTaskText.imageCaption(for: .imageGenerate(prompt: "Un marché", size: .landscape, quality: .hd, ref: "r1"))
+                == "Image · Paysage · 1080p")
+        #expect(MediaTaskText.imageCaption(for: .imageGenerate(prompt: "Une affiche", size: .portrait, quality: .uhd, ref: ""))
+                == "Image · Portrait · 4K")
+        #expect(MediaTaskText.imageCaption(for: .imageGenerate(prompt: "x", size: nil, quality: nil, ref: "")) == "Image · Carré · 1080p")
+        #expect(MediaTaskText.imageCaption(for: .imageUpscale(fileID: "f", target: .uhd, rightsConfirmed: nil, ref: "")) == nil)
+    }
+
+    @Test("« Créer comme image » : seulement une phrase qui COMMENCE comme une demande d'image, avec une description")
+    func intent() {
+        for text in ["Crée une image d'un marché au lever du soleil", "crée-moi une image de plage", "Dessine un baobab",
+                     "Peux-tu créer une image d’un lion", "  GÉNÈRE UNE IMAGE de Conakry la nuit", "Une image de pirogue"] {
+            #expect(ImageIntent.suggestsImage(text), "\(text)")
+        }
+        for text in ["", "Crée une image", "Dessine", "Explique-moi cette image", "Que représente une image de satellite ?",
+                     "Écris une lettre à la mairie", "Créer un compte"] {
+            #expect(!ImageIntent.suggestsImage(text), "\(text)")
+        }
+    }
+}

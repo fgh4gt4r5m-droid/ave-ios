@@ -6,7 +6,6 @@ import SwiftUI
 
 /// Feuilles des fichiers et images, ouvertes par la conversation (`ChatView`).
 enum MediaSheet: Identifiable, Equatable {
-    case createImage
     case edit(messageID: Int)
     /// Agrandir ou prolonger une photo jointe : la case d'accord d'abord.
     case rights(messageID: Int, action: RightsAction)
@@ -20,7 +19,6 @@ enum MediaSheet: Identifiable, Equatable {
 
     var id: String {
         switch self {
-        case .createImage: return "create"
         case .edit(let id): return "edit-\(id)"
         case .rights(let id, _): return "rights-\(id)"
         case .rewrite(let id): return "rewrite-\(id)"
@@ -434,8 +432,7 @@ struct ImageResultView<More: View>: View {
                     .frame(maxWidth: 320)
                     .clipShape(.rect(cornerRadius: theme.cornerRadius))
                     .overlay(alignment: .topLeading) { badges }
-                    .accessibilityLabel(media.simulated ? "\(UserMessages.simulatedBadge), \(UserMessages.generatedByAI)"
-                                                         : "Image \(UserMessages.generatedByAI.lowercased())")
+                    .accessibilityLabel(media.simulated ? UserMessages.simulatedBadge : "Image créée par AVE")
                 if media.simulated { InfoLine(text: UserMessages.simulatedImage) }
                 actions
                 if let savedMessage {
@@ -446,14 +443,14 @@ struct ImageResultView<More: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// « Générée par IA » TOUJOURS (règles de l'App Store) ; « Image de démonstration » tant que le moteur est factice.
-    private var badges: some View {
-        HStack(spacing: 6) {
-            if media.simulated { Badge(text: UserMessages.simulatedBadge) }
-            Badge(text: UserMessages.generatedByAI)
+    /// « Image de démonstration » tant que le moteur est factice. Plus d'étiquette « Générée par IA » sur l'image
+    /// (décision du propriétaire, 2026-10-24) : la conversation dit déjà qu'AVE l'a créée.
+    @ViewBuilder private var badges: some View {
+        if media.simulated {
+            Badge(text: UserMessages.simulatedBadge)
+                .padding(8)
+                .accessibilityHidden(true)
         }
-        .padding(8)
-        .accessibilityHidden(true)
     }
 
     private var actions: some View {

@@ -2,62 +2,6 @@
 import AVECore
 import SwiftUI
 
-/// « Créer une image » (maquette 4) : description de 1 000 caractères au maximum, format et qualité. La demande est
-/// explicite : une image n'est jamais créée par surprise.
-struct CreateImageSheet: View {
-    let onCreate: (String, ImageSize, ImageQuality) -> Void
-    @State private var prompt = ""
-    @State private var size: ImageSize = .square
-    @State private var quality: ImageQuality = .hd
-    @FocusState private var focused: Bool
-    @Environment(\.dismiss) private var dismiss
-
-    private var trimmed: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var tooLong: Bool { trimmed.count > MediaTaskRequest.promptMaxCharacters }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("Un marché de Conakry au lever du soleil, couleurs chaudes…", text: $prompt, axis: .vertical)
-                        .lineLimit(3...8)
-                        .focused($focused)
-                } footer: {
-                    if tooLong {
-                        Text(UserMessages.mediaError(code: "prompt_too_long")).foregroundStyle(.red)
-                    } else {
-                        Text(UserMessages.imageCreationHint)
-                    }
-                }
-                Section("Format") {
-                    Picker("Format", selection: $size) {
-                        ForEach(ImageSize.allCases, id: \.self) { Text(MediaFormat.aspect($0)).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Picker("Qualité", selection: $quality) {
-                        Text("1080p").tag(ImageQuality.hd)
-                        Text("4K · plus long").tag(ImageQuality.uhd)
-                    }
-                    .pickerStyle(.segmented)
-                }
-            }
-            .navigationTitle("Créer une image")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Annuler") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Créer") {
-                        onCreate(trimmed, size, quality)
-                        dismiss()
-                    }
-                    .disabled(trimmed.isEmpty || tooLong)
-                }
-            }
-            .onAppear { focused = true }
-        }
-    }
-}
-
 /// « Modifier la photo » (maquette 11) : la consigne et, pour une photo envoyée, la case d'accord des CGU.
 struct EditImageSheet: View {
     let needsRights: Bool

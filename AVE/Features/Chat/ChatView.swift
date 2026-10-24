@@ -12,7 +12,9 @@ import UniformTypeIdentifiers
 /// - réponses mises en forme, actions (copier, lire, partager, réessayer, avis), appui long = menu natif ;
 /// - messages écrits hors connexion affichés « en attente », envoyés au retour du réseau ;
 /// - UNE barre de saisie Liquid Glass ; le mode vocal s'ouvre en plein écran sur la MÊME session ;
-/// - « + » dans la barre : photo, appareil photo, fichier, créer une image (maquette validée le 2026-10-23).
+/// - « + » dans la barre : photo, appareil photo, fichier, créer une image (maquette validée le 2026-10-23) ;
+/// - l'image se crée DANS la conversation (maquette validée le 2026-10-24) : une pastille « Image » dans la barre, le
+///   format et la qualité dans la barre, la description en bulle ; plus de feuille séparée.
 public struct ChatView: View {
     let coordinator: SessionCoordinator
     @Binding var language: AVELanguageSelection
@@ -41,6 +43,9 @@ public struct ChatView: View {
     /// Idées rangées par défaut : une pastille « Idées » ; un toucher les déploie (maquette validée le 2026-10-23).
     @State private var ideasOpen = false
     @State private var dictation = DictationController()
+    /// Mode image de la barre (`nil` : barre normale). Il reste après l'envoi, pour enchaîner une autre image.
+    @State private var imageMode: ImageOptions?
+    @State private var imagesSent = 0
     @FocusState private var composerFocused: Bool
     @Environment(\.aveTheme) private var theme
 
@@ -172,30 +177,26 @@ public struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     statusLine
+                    let captions = imageCaptions
                     ForEach(coordinator.transcript.messages) { message in
                         if message.media != nil || message.task != nil {
                             MediaMessageView(message: message, coordinator: coordinator,
                                              showsActions: message.id == coordinator.transcript.messages.last?.id,
                                              onSheet: { mediaSheet = $0 })
                             .id(message.id)
-                        } else {
-                            MessageBubble(
-                                message: message,
-                                canReadAloud: coordinator.canReadAloud(messageID: message.id),
-                                isReplaying: coordinator.replayingMessageID == message.id,
-                                canFeedback: coordinator.canGiveFeedback,
-                                feedbackSent: coordinator.feedbackGiven.contains(message.id),
-                                onFeedback: { rating in
-                                    if rating == .up { Task { await coordinator.sendFeedback(messageID: message.id, rating: .up) } }
-                                    else { correctionTarget = message.id }
-                                },
-                                onReplay: { Task { await coordinator.readAloud(messageID: message.id) } },
-                                onConfirm: { coordinator.confirmAction(messageID: message.id) },
-                                onDecline: { coordinator.declineAction(messageID: message.id) },
-                                onRetry: retryAction(for: message),
-                                onEdit: editAction(for: message),
-                                showsMark: message.id == latestAnswerID)
+                        } else if let caption = captions[message.id] {
+                            // La description d'une image, puis « Image · Paysage · 1080p » (maquette, écran 3).
+                            VStack(alignment: .trailing, spacing: 6) {
+                                bubble(for: message)
+                                Label(caption, systemImage: "photo")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.trailing, 6)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                             .id(message.id)
+                        } else {
+                            bubble(for: message).id(message.id)
                         }
                     }
                     ForEach(coordinator.pendingTexts) { pending in
@@ -219,6 +220,38 @@ public struct ChatView: View {
                 }
             }
         }
+    }
+
+    /// Une description d'image est la bulle de la personne suivie de la carte (ou de l'image) d'une création.
+    private var imageCaptions: [Int: String] {
+        let list = coordinator.transcript.messages
+        var captions: [Int: String] = [:]
+        for (message, next) in zip(list, list.dropFirst()) where message.role == .user && message.media == nil {
+            if let request = next.task?.request ?? next.media?.request,
+               let caption = MediaTaskText.imageCaption(for: request) {
+                captions[message.id] = caption
+            }
+        }
+        return captions
+    }
+
+    private func bubble(for message: ChatMessage) -> some View {
+        MessageBubble(
+            message: message,
+            canReadAloud: coordinator.canReadAloud(messageID: message.id),
+            isReplaying: coordinator.replayingMessageID == message.id,
+            canFeedback: coordinator.canGiveFeedback,
+            feedbackSent: coordinator.feedbackGiven.contains(message.id),
+            onFeedback: { rating in
+                if rating == .up { Task { await coordinator.sendFeedback(messageID: message.id, rating: .up) } }
+                else { correctionTarget = message.id }
+            },
+            onReplay: { Task { await coordinator.readAloud(messageID: message.id) } },
+            onConfirm: { coordinator.confirmAction(messageID: message.id) },
+            onDecline: { coordinator.declineAction(messageID: message.id) },
+            onRetry: retryAction(for: message),
+            onEdit: editAction(for: message),
+            showsMark: message.id == latestAnswerID)
     }
 
     /// Dernière réponse écrite de l'assistant : elle seule porte le symbole en tête.
@@ -295,7 +328,7 @@ public struct ChatView: View {
             draft = text
             composerFocused = true
         case .createImage:
-            mediaSheet = .createImage
+            enterImageMode()
         case .attachDocument:
             showFiles = true
         }
@@ -343,11 +376,30 @@ public struct ChatView: View {
 
     private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
+    /// « Créer comme image » au-dessus de la barre : la phrase commence comme une demande d'image (jamais en mode image).
+    private var suggestsImageMode: Bool {
+        imageMode == nil && coordinator.offers(.generate) && ImageIntent.suggestsImage(draft)
+    }
+
     private var composer: some View {
         VStack(spacing: 6) {
-            if isEmpty && draft.isEmpty { ideasBar }
+            if isEmpty && draft.isEmpty && imageMode == nil { ideasBar }
+            if suggestsImageMode {
+                Button { enterImageMode() } label: {
+                    Label("Créer comme image", systemImage: "photo").font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.glass)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .accessibilityHint("Passe en mode image ; rien n'est créé avant l'envoi.")
+            }
             // Saisie en deux étages (validée) : le texte, puis « + » à gauche et le bouton rond à droite.
             VStack(alignment: .leading, spacing: 2) {
+                if imageMode != nil {
+                    imageModeChip
+                        .padding(.horizontal, 10)
+                        .padding(.top, 8)
+                }
                 // Pièces jointes en cours d'envoi, dans la barre (maquette 2).
                 ForEach(coordinator.attachmentDrafts) { draft in
                     AttachmentDraftRow(draft: draft, url: draft.localName.flatMap { coordinator.mediaURL(named: $0) },
@@ -355,7 +407,7 @@ public struct ChatView: View {
                         .padding(.top, 6)
                 }
                 if coordinator.supportsTextInput {
-                    TextField("Demandez à AVE", text: $draft, axis: .vertical)
+                    TextField(composerPrompt, text: $draft, axis: .vertical)
                         .lineLimit(1...6)
                         .focused($composerFocused)
                         .padding(.horizontal, 16)
@@ -370,6 +422,7 @@ public struct ChatView: View {
                 }
                 HStack(spacing: 4) {
                     if coordinator.supportsMedia { attachMenu }
+                    if imageMode != nil { imageOptions }
                     Spacer(minLength: 0)
                     if coordinator.supportsTextInput { dictationButton }
                     actionButton
@@ -393,7 +446,64 @@ public struct ChatView: View {
         .padding(.horizontal, 14)
         .padding(.bottom, 6)
         .animation(.easeInOut(duration: 0.15), value: canSend)
+        .animation(.snappy, value: suggestsImageMode)
+        .animation(.snappy, value: imageMode != nil)
         .onChange(of: draft) { _, new in if !new.isEmpty, ideasOpen { withAnimation(.snappy) { ideasOpen = false } } }
+    }
+
+    // MARK: Mode image (maquette « Créer une image dans AVE », validée le 2026-10-24)
+
+    private var composerPrompt: String {
+        guard imageMode != nil else { return "Demandez à AVE" }
+        return imagesSent == 0 ? "Décrivez l'image" : "Décrivez une autre image"
+    }
+
+    /// La pastille « Image » : un toucher quitte le mode image (la croix le dit).
+    private var imageModeChip: some View {
+        Button { exitImageMode() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "photo")
+                Text("Image")
+                Image(systemName: "xmark").font(.caption.weight(.bold))
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .tint(theme.accent)
+        .accessibilityLabel("Mode image")
+        .accessibilityHint("Touchez pour revenir aux questions.")
+    }
+
+    /// Format et qualité, menus du système dans la barre (défaut du moteur : carré, 1080p).
+    private var imageOptions: some View {
+        HStack(spacing: 0) {
+            Picker("Format", selection: Binding(get: { imageMode?.size ?? .square }, set: { imageMode?.size = $0 })) {
+                ForEach(ImageSize.allCases, id: \.self) { Text(MediaFormat.aspect($0)).tag($0) }
+            }
+            Picker("Qualité", selection: Binding(get: { imageMode?.quality ?? .hd }, set: { imageMode?.quality = $0 })) {
+                Text("1080p").tag(ImageQuality.hd)
+                Text("4K").tag(ImageQuality.uhd)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .font(.subheadline.weight(.semibold))
+        .tint(.primary)
+        .frame(minHeight: 44)
+    }
+
+    private func enterImageMode() {
+        withAnimation(.snappy) {
+            ideasOpen = false
+            if imageMode == nil { imageMode = ImageOptions() }
+        }
+        composerFocused = true
+    }
+
+    private func exitImageMode() {
+        withAnimation(.snappy) { imageMode = nil }
+        imagesSent = 0
     }
 
     /// Micro de dictée : la reconnaissance d'Apple, sur l'iPhone ; le texte s'écrit dans la barre, rien ne part seul.
@@ -450,6 +560,19 @@ public struct ChatView: View {
     private func send() {
         dictation.cancel()
         let message = draft
+        if let options = imageMode {
+            let prompt = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Trop longue : la description reste dans la barre pour être raccourcie.
+            guard prompt.count <= MediaTaskRequest.promptMaxCharacters else {
+                coordinator.notice = UserMessages.mediaError(code: "prompt_too_long")
+                return
+            }
+            draft = ""
+            sentCount += 1
+            imagesSent += 1
+            Task { await coordinator.createImage(prompt: prompt, size: options.size, quality: options.quality) }
+            return
+        }
         draft = ""
         sentCount += 1
         Task { await coordinator.sendText(message) }
@@ -470,7 +593,7 @@ public struct ChatView: View {
                 Label { Text("Fichier"); Text("PDF, Word, texte · 10 Mo max") } icon: { Image(systemName: "doc") }
             }
             if coordinator.offers(.generate) {
-                Button("Créer une image", systemImage: "sparkles") { mediaSheet = .createImage }
+                Button("Créer une image", systemImage: "sparkles") { enterImageMode() }
             }
         } label: {
             Image(systemName: "plus")
@@ -512,11 +635,6 @@ public struct ChatView: View {
 
     @ViewBuilder private func mediaSheetView(_ sheet: MediaSheet) -> some View {
         switch sheet {
-        case .createImage:
-            CreateImageSheet { prompt, size, quality in
-                Task { await coordinator.createImage(prompt: prompt, size: size, quality: quality) }
-            }
-            .presentationDetents([.medium, .large])
         case .edit(let id):
             EditImageSheet(needsRights: needsRights(id)) { instruction, rights in
                 Task { await coordinator.editImage(messageID: id, instruction: instruction, rightsConfirmed: rights) }
@@ -573,6 +691,12 @@ public struct ChatView: View {
         Binding(get: { coordinator.mode == .voice },
                 set: { if !$0 { Task { await coordinator.setMode(.text) } } })
     }
+}
+
+/// Format et qualité choisis dans la barre en mode image.
+struct ImageOptions: Equatable {
+    var size: ImageSize = .square
+    var quality: ImageQuality = .hd
 }
 
 /// Idées de questions du quotidien (validées le 2026-10-23), rangées par défaut. `needsMedia` : seulement si le moteur

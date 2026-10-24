@@ -92,6 +92,13 @@ Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Si
 `SessionCoordinator+Media.swift` (enchaînements). Tests : `AVETests/MediaTests.swift`.
 1. **« + » dans la barre** : Photos (sélecteur du système, sans accès à la photothèque), Appareil photo, Fichier (PDF, Word,
    texte), Créer une image. Absent quand le moteur n'est pas joignable (démo hors ligne) et pour les apps hôtes sans fichiers.
+   **Créer une image dans la conversation** (maquette validée le 2026-10-24, plus de feuille) : « Créer une image » (dans
+   « + » ou les idées) pose une pastille « Image ✕ » dans la barre ; format (Carré, Portrait, Paysage) et qualité (1080p,
+   4K) sont des menus du système dans la barre ; la description (1 000 caractères au plus) part en bulle, avec « Image ·
+   Paysage · 1080p » dessous, puis la carte. La pastille reste pour enchaîner ; sa croix rend la barre normale. En mode
+   normal, une phrase qui COMMENCE comme une demande d'image (« Crée une image… », « Dessine… ») fait apparaître
+   « Créer comme image » au-dessus de la barre (`ImageIntent`) : rien n'est créé sans ce toucher. Comprendre la phrase
+   seule viendra du moteur (D12, PR #37, `ready.engine.image_from_chat`).
 2. **Photos** : toujours réencodées en JPEG sur l'iPhone (HEIC refusé par le moteur ; métadonnées EXIF, dont la position,
    retirées), réduites à 4096 px et sous 10 Mo plutôt que refusées. Un PNG léger part tel quel.
 3. **Envoi** dès le choix, avec aperçu et croix dans la barre ; clé d'idempotence = la pièce jointe (pas de doublon en 3G).
@@ -105,7 +112,8 @@ Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Si
 6. **Carte de tâche** : durée ANNONCÉE par le moteur (« Environ 35 s »), barre plafonnée à 95 %, « Annuler ». Annuler avant
    `task_started` : l'annulation part dès que le moteur annonce la tâche. Hors ligne : rien n'est mis en file, « Réessayer ».
 7. **Résultats** : téléchargés aussitôt et gardés avec l'historique (dossier Media, exclu d'iCloud, effacé avec la
-   conversation). Image : « Générée par IA » toujours, « Image de démonstration » + phrase tant que `simulated` ; Enregistrer
+   conversation). Image : sans étiquette « Générée par IA » (décision du 2026-10-24), « Image de démonstration » + phrase
+   tant que `simulated` ; Enregistrer
    (Photos, ajout seul), Partager, Refaire, Signaler, Plus. Document : Ouvrir (aperçu d'iOS), Partager, Enregistrer dans Fichiers.
 8. **Signaler** : sept motifs, image masquée tout de suite ; « Merci » seulement si le moteur a gardé le signalement
    (`reports_disabled` : on le dit). `file_id` et `task_id` sont gardés dans l'historique, même expirés : le moteur accepte

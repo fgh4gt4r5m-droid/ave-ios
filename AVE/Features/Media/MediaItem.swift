@@ -165,6 +165,19 @@ public struct AttachmentDraft: Identifiable, Sendable, Equatable {
 
 /// Libellés et noms de fichiers des tâches, purs et testés.
 public enum MediaTaskText {
+    /// Sous la bulle d'une description d'image (maquette « Créer une image dans AVE », validée le 2026-10-24) :
+    /// « Image · Paysage · 1080p ». `nil` pour toute autre tâche. Sans format ni qualité : les défauts du moteur.
+    public static func imageCaption(for request: MediaTaskRequest) -> String? {
+        guard case .imageGenerate(_, let size, let quality, _) = request else { return nil }
+        let aspect: String
+        switch size ?? .square {
+        case .square: aspect = "Carré"
+        case .portrait: aspect = "Portrait"
+        case .landscape: aspect = "Paysage"
+        }
+        return "Image · \(aspect) · \((quality ?? .hd) == .uhd ? "4K" : "1080p")"
+    }
+
     /// Ce que la carte affiche pendant le travail.
     public static func workingTitle(for request: MediaTaskRequest) -> String {
         switch request {

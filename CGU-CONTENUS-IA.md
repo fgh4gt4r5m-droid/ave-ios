@@ -10,7 +10,8 @@
 
 AVE peut, à votre demande, créer des images à partir d'une description, modifier, agrandir ou prolonger une image que vous
 joignez, et traduire, résumer ou reformuler un document que vous joignez. Ces contenus sont produits par une intelligence
-artificielle : ils peuvent être inexacts, et ils sont toujours signalés comme « Générée par IA » dans l'application.
+artificielle : ils peuvent être inexacts. Dans l'application, ils apparaissent dans la conversation comme des réponses
+d'AVE.
 
 ## 2. Ce que vous vous engagez à respecter
 
