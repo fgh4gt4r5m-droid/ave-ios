@@ -20,7 +20,8 @@ struct SpokenCollectionRow: View {
             case .awaitingText:
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(UserMessages.collectionKept(language: collection.languageName))
+                        Text(UserMessages.collectionKept(language: collection.languageName,
+                                                         unsupported: collection.languageUnsupported))
                             .font(.subheadline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Écrire ma phrase", systemImage: "pencil", action: onWrite)
@@ -36,7 +37,8 @@ struct SpokenCollectionRow: View {
                     .padding(.vertical, 11)
                     .background(theme.userBubble, in: .rect(cornerRadius: theme.cornerRadius))
                     .padding(.leading, 48)
-                Text(UserMessages.collectionThanks(language: collection.languageName))
+                Text(UserMessages.collectionThanks(language: collection.languageName,
+                                                   unsupported: collection.languageUnsupported))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -105,12 +107,13 @@ struct SpokenTextSheet: View {
 /// Dans le mode vocal : au-dessus des boutons, « Écrire ma phrase » pour la dernière phrase gardée.
 struct SpokenCollectionPrompt: View {
     let languageName: String
+    var unsupported = true
     let onWrite: () -> Void
 
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                Text(UserMessages.collectionKept(language: languageName))
+                Text(UserMessages.collectionKept(language: languageName, unsupported: unsupported))
                     .font(.subheadline)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button("Écrire ma phrase", systemImage: "pencil", action: onWrite)

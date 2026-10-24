@@ -38,7 +38,8 @@ struct VoiceModeView: View {
                 // D13 : la dernière phrase gardée, à écrire (rien ne s'ouvre de force).
                 if let id = coordinator.pendingCollectionID,
                    let collection = coordinator.transcript.message(id)?.collection {
-                    SpokenCollectionPrompt(languageName: collection.languageName) { writing = id }
+                    SpokenCollectionPrompt(languageName: collection.languageName,
+                                           unsupported: collection.languageUnsupported) { writing = id }
                 }
                 controls
             }

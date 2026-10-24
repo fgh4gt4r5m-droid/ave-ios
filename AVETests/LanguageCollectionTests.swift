@@ -27,10 +27,24 @@ struct LanguageCollectionTests {
         t.recordSpokenText(messageID: kept?.id ?? -1, text: "Ntan nu nde fe")
         #expect(t.messages.last?.collection?.state == .sent("Ntan nu nde fe"))
 
-        t.apply(.turnError(code: "asr_failed", message: "", lang: "ful", retryAfterSeconds: nil, utteranceID: 6,
+        t.apply(.turnError(code: "language_unavailable", message: "", lang: "ful", retryAfterSeconds: nil, utteranceID: 6,
                            collected: false))
         #expect(t.messages.last?.collection?.state == .notKept)
         #expect(UserMessages.collectionNotKept(language: "Peul (Pular)").contains("Aider AVE à s'améliorer"))
+
+        // Vecteur « D13, voix non recueillie » (PR #44) : français pris en charge, phrase non comprise, rien de gardé :
+        // le message habituel, jamais « ne comprend pas encore le français ».
+        t.apply(.turnError(code: "asr_failed", message: "", lang: "fra", retryAfterSeconds: nil, utteranceID: 1,
+                           collected: false))
+        #expect(t.messages.last?.collection == nil)
+        #expect(t.messages.last?.text == UserMessages.turnError(code: "asr_failed"))
+        // Gardée, en français : « mieux comprendre », pas « apprendre ».
+        t.apply(.turnError(code: "asr_failed", message: "", lang: "fra", retryAfterSeconds: nil, utteranceID: 2,
+                           collected: true))
+        #expect(t.messages.last?.collection?.languageUnsupported == false)
+        #expect(UserMessages.collectionThanks(language: "Français", unsupported: false)
+                == "Merci : votre phrase aidera AVE à mieux comprendre le français.")
+        #expect(UserMessages.collectionThanks(language: "Soussou") == "Merci : votre phrase aidera AVE à apprendre le soussou.")
 
         // Un tour écrit, ou un moteur antérieur : le message habituel, rien à écrire.
         t.apply(.turnError(code: "language_unavailable", message: "", lang: "sus", retryAfterSeconds: nil))

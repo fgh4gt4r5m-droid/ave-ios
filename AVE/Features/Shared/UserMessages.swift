@@ -98,11 +98,15 @@ public enum UserMessages {
 
     /// `name` : nom de la langue tel qu'affiché (« Soussou ») ; mis en minuscules dans la phrase.
     public static func spokenPhrase(language name: String) -> String { "Phrase dite en \(name.lowercased())" }
-    public static func collectionKept(language name: String) -> String {
-        "Votre phrase est gardée pour apprendre le \(name.lowercased()). Écrivez-la pour qu'AVE sache ce que vous avez dit."
+    /// `unsupported` : langue qu'AVE ne transcrit pas encore (« apprendre ») ; sinon phrase non comprise (« mieux comprendre »).
+    public static func collectionKept(language name: String, unsupported: Bool = true) -> String {
+        "Votre phrase est gardée pour \(goal(name, unsupported)). Écrivez-la pour qu'AVE sache ce que vous avez dit."
     }
-    public static func collectionThanks(language name: String) -> String {
-        "Merci : votre phrase aidera AVE à apprendre le \(name.lowercased())."
+    public static func collectionThanks(language name: String, unsupported: Bool = true) -> String {
+        "Merci : votre phrase aidera AVE à \(goal(name, unsupported).replacingOccurrences(of: "aider AVE à ", with: ""))."
+    }
+    private static func goal(_ name: String, _ unsupported: Bool) -> String {
+        unsupported ? "apprendre le \(name.lowercased())" : "aider AVE à mieux comprendre le \(name.lowercased())"
     }
     public static func collectionNotKept(language name: String) -> String {
         "AVE ne comprend pas encore le \(name.lowercased()). Rien n'a été gardé : pour aider à l'apprendre, activez "

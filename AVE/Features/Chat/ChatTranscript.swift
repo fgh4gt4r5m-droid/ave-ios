@@ -33,11 +33,15 @@ public struct SpokenCollection: Sendable, Equatable {
     }
     public let utteranceID: Int
     public let languageName: String
+    /// `false` : la langue est prise en charge mais la phrase n'a pas été comprise (`asr_failed`) ; la phrase écrite
+    /// aide alors AVE à mieux la comprendre, plutôt qu'à l'apprendre.
+    public let languageUnsupported: Bool
     public var state: State
 
-    public init(utteranceID: Int, languageName: String, state: State) {
+    public init(utteranceID: Int, languageName: String, languageUnsupported: Bool = true, state: State) {
         self.utteranceID = utteranceID
         self.languageName = languageName
+        self.languageUnsupported = languageUnsupported
         self.state = state
     }
 }
@@ -133,10 +137,14 @@ public struct ChatTranscript: Sendable, Equatable {
 
         case .turnError(let code, _, let lang, let retryAfter, let utteranceID, let collected):
             finishAssistant(.interrupted)
-            if let utteranceID, let collected, Self.collectionCodes.contains(code) {
+            // Langue prise en charge mais phrase non comprise, sans voix gardée : le message habituel, pas de
+            // « ne comprend pas encore le français ».
+            let unsupported = code == "language_unavailable"
+            if let utteranceID, let collected, Self.collectionCodes.contains(code), collected || unsupported {
                 let name = lang.flatMap(AVELanguage.init(rawValue:)).flatMap(LanguageCatalog.option(for:))?.name
                     ?? "cette langue"
                 let collection = SpokenCollection(utteranceID: utteranceID, languageName: name,
+                                                  languageUnsupported: unsupported,
                                                   state: collected ? .awaitingText : .notKept)
                 append(role: .system, text: UserMessages.spokenPhrase(language: name), status: .complete,
                        collection: collection)
