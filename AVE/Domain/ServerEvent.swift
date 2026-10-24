@@ -67,18 +67,29 @@ public struct EngineStatus: Sendable, Equatable {
     public enum Dialogue: String, Sendable, Equatable { case real, echo }
     public enum Voice: String, Sendable, Equatable { case real, testTone = "test_tone" }
     public enum Media: String, Sendable, Equatable { case real, simulated, off }
+    /// Tâches d'image (D11b, moteur PR #36). Une valeur inconnue est ignorée : l'app ne propose que ce qu'elle sait faire.
+    public enum ImageTask: String, Sendable, Equatable, CaseIterable {
+        case generate = "image_generate", edit = "image_edit", upscale = "image_upscale", extend = "image_extend"
+    }
 
     public let dialogue: Dialogue?
     public let voice: Voice?
     public let images: Media?
     public let documents: Media?
+    /// `ready.engine.image_tasks` : `nil` = champ absent (moteur antérieur à D11), toutes les tâches sont proposées.
+    public let imageTasks: Set<ImageTask>?
 
-    public init(dialogue: Dialogue?, voice: Voice?, images: Media?, documents: Media?) {
+    public init(dialogue: Dialogue?, voice: Voice?, images: Media?, documents: Media?, imageTasks: Set<ImageTask>? = nil) {
         self.dialogue = dialogue
         self.voice = voice
         self.images = images
         self.documents = documents
+        self.imageTasks = imageTasks
     }
+
+    /// Le moteur propose-t-il cette tâche dans la session ? L'exploitant en coupe (`AVE_IMAGES_DISABLED`, par exemple
+    /// retouche et prolongement trop lents) sans nouveau build : l'app masque alors le bouton.
+    public func offers(_ task: ImageTask) -> Bool { imageTasks?.contains(task) ?? true }
 }
 
 /// Un événement avec son `seq` (présent sur tous les événements sauf ready/replayed/pong/error).
@@ -116,7 +127,10 @@ public struct ServerFrame: Sendable, Equatable {
                     case session_id, resumed, last_mic_seq, seq, protocolVersion = "protocol"
                     case graceSeconds = "grace_s", languages, learning, engine
                 }
-                struct RawEngine: Decodable { let dialogue: String?; let voice: String?; let images: String?; let documents: String? }
+                struct RawEngine: Decodable {
+                    let dialogue: String?; let voice: String?; let images: String?; let documents: String?
+                    let image_tasks: [String]?
+                }
 
                 // Les champs ajoutés au fil des versions (grace_s est un FLOTTANT : 30.0, languages) ne
                 // doivent JAMAIS empêcher la lecture de `ready` : sans lui, la session n'est jamais prête.
@@ -136,7 +150,8 @@ public struct ServerFrame: Sendable, Equatable {
                         EngineStatus(dialogue: $0.dialogue.flatMap(EngineStatus.Dialogue.init(rawValue:)),
                                      voice: $0.voice.flatMap(EngineStatus.Voice.init(rawValue:)),
                                      images: $0.images.flatMap(EngineStatus.Media.init(rawValue:)),
-                                     documents: $0.documents.flatMap(EngineStatus.Media.init(rawValue:)))
+                                     documents: $0.documents.flatMap(EngineStatus.Media.init(rawValue:)),
+                                     imageTasks: $0.image_tasks.map { Set($0.compactMap(EngineStatus.ImageTask.init(rawValue:))) })
                     }
                 }
             }

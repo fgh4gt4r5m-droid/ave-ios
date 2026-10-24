@@ -87,7 +87,8 @@ struct MediaMessageView: View {
                     AttachmentBubble(media: media, url: coordinator.mediaURL(media))
                         .contextMenu { if media.state == .ready { actionsMenu(media) } }
                     if showsActions, media.state == .ready, coordinator.supportsMedia {
-                        AttachmentActions(media: media, onAction: perform)
+                        AttachmentActions(media: media, offered: Set(EngineStatus.ImageTask.allCases.filter { coordinator.offers($0) }),
+                                          onAction: perform)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -111,16 +112,23 @@ struct MediaMessageView: View {
                     Button(MediaFormat.aspect(size)) { perform(.crop(size)) }
                 }
             }
-            Menu("Prolonger", systemImage: "arrow.up.left.and.arrow.down.right") {
-                ForEach(ImageSize.allCases, id: \.self) { size in
-                    Button("En \(MediaFormat.aspect(size).lowercased())") { perform(.extend(size)) }
+            // D11 : une tâche coupée par l'exploitant n'apparaît pas (recadrer se fait sur l'iPhone, toujours là).
+            if coordinator.offers(.extend) {
+                Menu("Prolonger", systemImage: "arrow.up.left.and.arrow.down.right") {
+                    ForEach(ImageSize.allCases, id: \.self) { size in
+                        Button("En \(MediaFormat.aspect(size).lowercased())") { perform(.extend(size)) }
+                    }
                 }
             }
-            Menu("Agrandir", systemImage: "sparkles") {
-                Button("En 1080p") { perform(.upscale(.hd)) }
-                Button("En 4K") { perform(.upscale(.uhd)) }
+            if coordinator.offers(.upscale) {
+                Menu("Agrandir", systemImage: "sparkles") {
+                    Button("En 1080p") { perform(.upscale(.hd)) }
+                    Button("En 4K") { perform(.upscale(.uhd)) }
+                }
             }
-            Button("Modifier…", systemImage: "pencil") { perform(.edit) }
+            if coordinator.offers(.edit) {
+                Button("Modifier…", systemImage: "pencil") { perform(.edit) }
+            }
         } else {
             Button("Traduire en anglais", systemImage: "character.bubble") { perform(.translate("eng")) }
             Button("Traduire en français", systemImage: "character.bubble") { perform(.translate("fra")) }
@@ -190,6 +198,8 @@ struct AttachmentBubble: View {
 /// Raccourcis sous la dernière pièce jointe (maquettes 3 et 10).
 struct AttachmentActions: View {
     let media: MediaItem
+    /// D11 : tâches d'image proposées par le moteur (un ensemble plutôt qu'une fonction du coordinateur, isolé au MainActor).
+    let offered: Set<EngineStatus.ImageTask>
     let onAction: (AttachmentAction) -> Void
 
     var body: some View {
@@ -201,14 +211,20 @@ struct AttachmentActions: View {
             FlowChips {
                 if media.kind == .image {
                     Menu { aspectButtons { onAction(.crop($0)) } } label: { chip("Recadrer", "crop") }
-                    Menu { aspectButtons { onAction(.extend($0)) } } label: {
-                        chip("Prolonger", "arrow.up.left.and.arrow.down.right")
+                    if offered.contains(.extend) {
+                        Menu { aspectButtons { onAction(.extend($0)) } } label: {
+                            chip("Prolonger", "arrow.up.left.and.arrow.down.right")
+                        }
                     }
-                    Menu {
-                        Button("En 1080p") { onAction(.upscale(.hd)) }
-                        Button("En 4K") { onAction(.upscale(.uhd)) }
-                    } label: { chip("Agrandir", "sparkles") }
-                    Button { onAction(.edit) } label: { chip("Modifier…", "pencil") }
+                    if offered.contains(.upscale) {
+                        Menu {
+                            Button("En 1080p") { onAction(.upscale(.hd)) }
+                            Button("En 4K") { onAction(.upscale(.uhd)) }
+                        } label: { chip("Agrandir", "sparkles") }
+                    }
+                    if offered.contains(.edit) {
+                        Button { onAction(.edit) } label: { chip("Modifier…", "pencil") }
+                    }
                 } else {
                     Menu {
                         Button("En anglais") { onAction(.translate("eng")) }

@@ -55,6 +55,25 @@ struct EngineNoticeTests {
         #expect(UserMessages.demoNotice(engine: e, fallback: nil) == "Version d'essai : l'assistant répète ce que vous dites.")
         #expect(try engine(#","engine":"oui""#) == nil)
     }
+
+    /// Vecteur « D11, retouche et prolongement retirés par l'exploitant » (moteur `main` @ `8685cd5`, PR #36).
+    @Test("D11 : image_tasks dit quelles tâches d'image proposer ; absent = toutes ; valeur inconnue ignorée")
+    func imageTasks() throws {
+        let cut = try engine(#","engine":{"dialogue":"real","voice":"real","images":"real","documents":"real","image_tasks":["image_generate","image_upscale"]}"#)
+        #expect(cut?.imageTasks == [.generate, .upscale])
+        #expect(cut?.offers(.generate) == true && cut?.offers(.upscale) == true)
+        #expect(cut?.offers(.edit) == false && cut?.offers(.extend) == false)
+
+        let legacy = try engine(#","engine":{"dialogue":"real","voice":"real","images":"real","documents":"real"}"#)
+        #expect(legacy?.imageTasks == nil)
+        #expect(EngineStatus.ImageTask.allCases.allSatisfy { legacy?.offers($0) == true })
+
+        let off = try engine(#","engine":{"dialogue":"real","voice":"real","images":"off","documents":"off","image_tasks":[]}"#)
+        #expect(EngineStatus.ImageTask.allCases.allSatisfy { off?.offers($0) == false })
+
+        let future = try engine(#","engine":{"dialogue":"real","images":"real","image_tasks":["image_generate","video_generate"]}"#)
+        #expect(future?.imageTasks == [.generate])
+    }
 }
 
 @Suite("Assistant : tableaux dans les réponses")
@@ -150,5 +169,19 @@ struct GlowLevelTests {
             let value = GlowLevel.edge(level: Float(step) / 20, reduceMotion: false)
             #expect(abs(value * 20 - (value * 20).rounded()) < 1e-9)
         }
+    }
+}
+
+@Suite("Assistant : forme des réponses de Gemma (moteur en ligne, 2026-10-24)")
+struct GemmaFormatTests {
+    /// Puces « *   » (une étoile, trois espaces) et titres en gras, relevés par la session moteur sur une vraie réponse.
+    @Test("puces « *   » lues comme des puces, le gras reste en ligne, « ** » en tête n'est pas une puce")
+    func gemmaBullets() {
+        let text = "**Trois conseils :**\n*   **Budget :** notez vos dépenses.\n*   Comparez les prix."
+        #expect(MarkdownBlocks.parse(text) == [
+            .paragraph("**Trois conseils :**"),
+            .bullet("**Budget :** notez vos dépenses."),
+            .bullet("Comparez les prix."),
+        ])
     }
 }

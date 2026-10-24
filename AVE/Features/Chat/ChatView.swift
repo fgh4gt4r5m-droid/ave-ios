@@ -258,7 +258,10 @@ public struct ChatView: View {
             if ideasOpen {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
-                        ForEach(Idea.all.filter { coordinator.supportsMedia || !$0.needsMedia }) { idea in
+                        ForEach(Idea.all.filter { idea in
+                            if idea.createsImage { return coordinator.offers(.generate) }
+                            return coordinator.supportsMedia || !idea.needsMedia
+                        }) { idea in
                             Button { use(idea) } label: {
                                 Label(idea.title, systemImage: idea.symbol).font(.subheadline)
                             }
@@ -466,7 +469,9 @@ public struct ChatView: View {
             Button { showFiles = true } label: {
                 Label { Text("Fichier"); Text("PDF, Word, texte · 10 Mo max") } icon: { Image(systemName: "doc") }
             }
-            Button("Créer une image", systemImage: "sparkles") { mediaSheet = .createImage }
+            if coordinator.offers(.generate) {
+                Button("Créer une image", systemImage: "sparkles") { mediaSheet = .createImage }
+            }
         } label: {
             Image(systemName: "plus")
                 .font(.body.weight(.semibold))
@@ -587,6 +592,12 @@ struct Idea: Identifiable {
     var needsMedia: Bool {
         if case .prefix = action { return false }
         return true
+    }
+
+    /// D11 : l'idée « Créer une image » suit `image_tasks`.
+    var createsImage: Bool {
+        if case .createImage = action { return true }
+        return false
     }
 
     static let all: [Idea] = [

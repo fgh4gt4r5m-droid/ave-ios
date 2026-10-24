@@ -16,6 +16,9 @@ public struct MediaServices: Sendable {
 /// WebSocket ; les fichiers passent en HTTP. Rien ne part sans un geste explicite de la personne.
 extension SessionCoordinator {
     public var supportsMedia: Bool { media != nil }
+    /// D11 : tâche d'image proposée par le moteur dans cette session (toutes avant le premier `ready` ou avec un moteur
+    /// antérieur ; une tâche coupée répondrait de toute façon `feature_disabled`).
+    public func offers(_ task: EngineStatus.ImageTask) -> Bool { supportsMedia && (engine?.offers(task) ?? true) }
 
     public func mediaURL(_ item: MediaItem) -> URL? {
         item.localName.flatMap(mediaURL(named:))
@@ -167,7 +170,7 @@ extension SessionCoordinator {
 
     public func canRedo(messageID: Int) -> Bool {
         guard let request = transcript.message(messageID)?.media?.request, case .imageGenerate = request else { return false }
-        return true
+        return offers(.generate)
     }
 
     /// « Annuler » sur la carte. Avant `task_started`, l'annulation est locale ; elle est transmise au moteur dès qu'il

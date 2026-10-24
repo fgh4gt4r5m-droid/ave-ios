@@ -98,6 +98,8 @@ Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Si
    Le moteur oublie un fichier en 1 h : avant une tâche, l'app le renvoie depuis l'iPhone si besoin.
 4. **Actions** en raccourcis sous la dernière pièce jointe, et par appui long : photo → Recadrer (sur l'iPhone, sans envoi),
    Prolonger, Agrandir 1080p/4K, Modifier ; document → Traduire (anglais, français seulement), Résumer, Reformuler.
+   **D11** (moteur PR #36) : Prolonger, Agrandir, Modifier et « Créer une image » n'apparaissent que si `ready.engine.image_tasks`
+   les liste (absent = moteur antérieur, tout est proposé) ; l'exploitant coupe ainsi une tâche sans nouveau build.
 5. **Case d'accord** (CGU §2, rien de coché d'avance) avant toute retouche d'une photo envoyée, une fois par photo ; aussi
    pour une image d'AVE dont le moteur a oublié le fichier (elle repart de l'iPhone comme une photo envoyée).
 6. **Carte de tâche** : durée ANNONCÉE par le moteur (« Environ 35 s »), barre plafonnée à 95 %, « Annuler ». Annuler avant
