@@ -352,6 +352,27 @@ public final class SessionCoordinator {
 
     public func dismissLearningMessage() { learningMessage = nil }
 
+    /// D13 : la dernière phrase gardée qui attend d'être écrite (le mode vocal propose « Écrire ma phrase »).
+    public var pendingCollectionID: Int? {
+        transcript.messages.last { $0.collection?.state == .awaitingText }?.id
+    }
+
+    /// D13 : la phrase écrite rejoint la voix gardée par le moteur (`feedback` avec la correction), pour la revue humaine.
+    public func sendSpokenText(messageID: Int, text: String) async {
+        guard let collection = transcript.message(messageID)?.collection, collection.state == .awaitingText else { return }
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        guard cleaned.count <= 1000 else {
+            notice = UserMessages.feedbackTooLong
+            return
+        }
+        if await client.sendFeedback(utteranceID: collection.utteranceID, rating: .down, correction: cleaned) {
+            transcript.recordSpokenText(messageID: messageID, text: cleaned)
+        } else {
+            notice = UserMessages.notConnected
+        }
+    }
+
     /// Montre la notice à un moment calme : session ouverte, au repos, après le premier tour terminé, une seule fois par session.
     private func evaluateLearningPrompt() {
         guard learningOfferedToUser, learningPrompt == nil, phase == .idle, completedTurns >= configuration.learningPromptAfterTurns,

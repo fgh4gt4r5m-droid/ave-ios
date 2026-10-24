@@ -13,6 +13,8 @@ struct VoiceModeView: View {
     @Binding var language: AVELanguageSelection
     @Binding var captions: Bool
     let haptics: Bool
+    /// D13 : la phrase gardée qu'on écrit (feuille « Ce que vous avez dit »).
+    @State private var writing: Int?
     @Environment(\.aveTheme) private var theme
 
     private var state: OrbState { coordinator.orbState }
@@ -32,6 +34,11 @@ struct VoiceModeView: View {
                 if let notice = coordinator.notice {
                     NoticeBanner(text: notice, systemImage: "exclamationmark.triangle.fill",
                                  onDismiss: { coordinator.dismissNotice() })
+                }
+                // D13 : la dernière phrase gardée, à écrire (rien ne s'ouvre de force).
+                if let id = coordinator.pendingCollectionID,
+                   let collection = coordinator.transcript.message(id)?.collection {
+                    SpokenCollectionPrompt(languageName: collection.languageName) { writing = id }
                 }
                 controls
             }
@@ -56,6 +63,11 @@ struct VoiceModeView: View {
         }
         // Toujours sombre, comme un appel : la lumière se voit, rien d'autre ne bouge.
         .preferredColorScheme(.dark)
+        .sheet(item: Binding(get: { writing.map(WritingTarget.init) }, set: { writing = $0?.id })) { target in
+            SpokenTextSheet(languageName: coordinator.transcript.message(target.id)?.collection?.languageName ?? "") { text in
+                Task { await coordinator.sendSpokenText(messageID: target.id, text: text) }
+            }
+        }
     }
 
     /// Le logo vivant remplace l'orbe : au repos l'Afrique en barres ; en écoute un cercle, en réflexion une onde, en
@@ -166,5 +178,9 @@ struct VoiceModeView: View {
         .accessibilityLabel(title)
         .accessibilityAddTraits(active ? .isSelected : [])
     }
+}
+/// Identifiant de feuille (un `Int` n'est pas `Identifiable`).
+struct WritingTarget: Identifiable {
+    let id: Int
 }
 #endif

@@ -218,7 +218,7 @@ d'icône et d'image.
    testé), `.searchable`, balayage Supprimer / Renommer, appui long. Réglages et Nouvelle conversation dans la barre
    du haut. Plus de tiroir, de voile ni de pastille de profil dessinés.
 2. **Titre et langue** (`LanguageTitleMenu`) : `navigationTitle` + `navigationSubtitle` (la langue) + menu de titre du
-   système (langues, coche, « Bientôt » grisé ; Renommer). Même menu en mode vocal. La feuille de langue n'est plus
+   système (langues, coche, « Bientôt » choisissable depuis le 2026-10-24, sous-titre « Soussou · Bientôt » ; Renommer). Même menu en mode vocal. La feuille de langue n'est plus
    ouverte depuis la conversation (elle reste dans Réglages).
 3. **Saisie du code** : un seul `TextField` en grands chiffres dans un formulaire (`oneTimeCode`, vérifié dès qu'il est
    complet), en-tête « Envoyé au … », pied « Renvoyer », ligne « Changer de numéro ».
@@ -229,3 +229,18 @@ d'icône et d'image.
 6. **Premier lancement** : le choix de la langue est poussé dans une pile de navigation, en liste à coche ; plus de
    tuiles ni de points de page dessinés.
 7. **Boutons** : envoi et orbe vocale des apps hôtes (`FloatingVoiceOrbView`) en boutons Liquid Glass du système.
+
+## Apprendre nos langues (D13, D14 ; maquette validée le 2026-10-24 ; moteur PR #41 @ 7a006b3)
+Code : `Learning/SpokenCollectionViews.swift`, `ChatTranscript` (`SpokenCollection`), `SessionCoordinator.sendSpokenText`,
+`LanguageTitleMenu`. Tests : `LanguageCollectionTests`.
+1. **Langues « Bientôt »** : choisissables dans le menu de titre et au premier lancement (décision du propriétaire :
+   les testeurs y enregistrent leur voix), sous-titre « Soussou · Bientôt ».
+2. **Phrase gardée** (`turn_error` d'un tour vocal avec `collected: true`, codes `language_unavailable` ou
+   `asr_failed`) : « Phrase dite en soussou », puis une boîte « Écrire ma phrase » dans le fil et au-dessus des boutons
+   du mode vocal (rien ne s'ouvre de force). Feuille « Ce que vous avez dit » : la phrase part en
+   `feedback {utterance_id, rating:"down", correction}`, rattachée à la voix pour la revue humaine ; puis la phrase en
+   bulle et « Merci : votre phrase aidera AVE à apprendre le soussou. »
+3. **Rien de gardé** (`collected: false`) : on le dit, avec « Ouvrir les Réglages » (« Aider AVE à s'améliorer »).
+4. **Écoute d'essai** (`ready.engine.listening = "test"`) : la mention d'essai ajoute « En mode vocal, AVE ne comprend
+   pas encore ce que vous dites. » Valeur en ligne au 2026-10-24 : `test` (aucune reconnaissance vocale branchée).
+Rien n'est collecté en ligne tant que le propriétaire n'a pas activé l'apprentissage (notice à faire relire).

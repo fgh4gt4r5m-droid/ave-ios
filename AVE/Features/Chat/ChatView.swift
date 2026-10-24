@@ -33,7 +33,11 @@ public struct ChatView: View {
     let onTranscriptChange: (([ChatMessage]) -> Void)?
     /// « Renommer » dans le menu de titre. `nil` : pas d'historique, rien à renommer.
     let onRename: ((String) -> Void)?
+    /// « Ouvrir les Réglages » sous une phrase non gardée (D13). `nil` : pas de bouton.
+    let onOpenSettings: (() -> Void)?
     @State private var draft = ""
+    /// D13 : la phrase gardée qu'on écrit (feuille « Ce que vous avez dit »).
+    @State private var writingCollection: Int?
     /// « Renommer » du menu de titre : un champ dans une alerte du système.
     @State private var renaming = false
     @State private var newTitle = ""
@@ -59,7 +63,8 @@ public struct ChatView: View {
     public init(coordinator: SessionCoordinator, language: Binding<AVELanguageSelection>,
                 captions: Binding<Bool> = .constant(true), title: String? = nil, firstName: String? = nil,
                 haptics: Bool = true, onShowHistory: (() -> Void)? = nil, onNewConversation: (() -> Void)? = nil,
-                onTranscriptChange: (([ChatMessage]) -> Void)? = nil, onRename: ((String) -> Void)? = nil) {
+                onTranscriptChange: (([ChatMessage]) -> Void)? = nil, onRename: ((String) -> Void)? = nil,
+                onOpenSettings: (() -> Void)? = nil) {
         self.coordinator = coordinator
         self._language = language
         self._captions = captions
@@ -70,6 +75,7 @@ public struct ChatView: View {
         self.onNewConversation = onNewConversation
         self.onTranscriptChange = onTranscriptChange
         self.onRename = onRename
+        self.onOpenSettings = onOpenSettings
     }
 
     public var body: some View {
@@ -84,6 +90,11 @@ public struct ChatView: View {
                                                 renaming = true
                                             } : nil))
                 .toolbar { toolbarContent }
+        }
+        .sheet(item: Binding(get: { writingCollection.map(WritingTarget.init) }, set: { writingCollection = $0?.id })) { target in
+            SpokenTextSheet(languageName: coordinator.transcript.message(target.id)?.collection?.languageName ?? "") { text in
+                Task { await coordinator.sendSpokenText(messageID: target.id, text: text) }
+            }
         }
         .alert("Renommer la conversation", isPresented: $renaming) {
             TextField("Titre", text: $newTitle)
@@ -245,7 +256,11 @@ public struct ChatView: View {
     private static let endID = "fin-du-fil"
 
     @ViewBuilder private func row(_ message: ChatMessage, captions: [Int: String]) -> some View {
-        if message.media != nil || message.task != nil {
+        if let collection = message.collection {
+            SpokenCollectionRow(collection: collection, onWrite: { writingCollection = message.id },
+                                onOpenSettings: onOpenSettings)
+            .id(message.id)
+        } else if message.media != nil || message.task != nil {
             MediaMessageView(message: message, coordinator: coordinator,
                              showsActions: message.id == coordinator.transcript.messages.last?.id,
                              onSheet: { mediaSheet = $0 })

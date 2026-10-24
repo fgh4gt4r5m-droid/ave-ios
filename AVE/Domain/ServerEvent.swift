@@ -26,7 +26,10 @@ public enum ServerEvent: Sendable, Equatable {
     case contextAck(kept: Int, dropped: Int)
     /// Échec d'un tour, session ouverte. `turn_end` suit, sauf pour `rate_limited`.
     /// `retryAfterSeconds` : seulement pour `rate_limited` (entier ≥ 1).
-    case turnError(code: String, message: String, lang: String?, retryAfterSeconds: Int?)
+    /// D13 (moteur PR #41) : un tour VOCAL dont la reconnaissance échoue porte `utteranceID` et `collected` (`true` :
+    /// la voix est gardée, avec l'accord d'aide, pour être transcrite par la personne).
+    case turnError(code: String, message: String, lang: String?, retryAfterSeconds: Int?, utteranceID: Int? = nil,
+                   collected: Bool? = nil)
     /// Détection de parole côté serveur (seulement avec `vad:"server"`) : ignorés par l'app (`vad:"client"`).
     case speechStart, speechEnd
     case languageSet(lang: String)
@@ -67,6 +70,8 @@ public struct EngineStatus: Sendable, Equatable {
     public enum Dialogue: String, Sendable, Equatable { case real, echo }
     public enum Voice: String, Sendable, Equatable { case real, testTone = "test_tone" }
     public enum Media: String, Sendable, Equatable { case real, simulated, off }
+    /// D14 (moteur PR #41) : `test` = la voix n'est pas comprise, la transcription vient du moteur de test.
+    public enum Listening: String, Sendable, Equatable { case real, test }
     /// Tâches d'image (D11b, moteur PR #36). Une valeur inconnue est ignorée : l'app ne propose que ce qu'elle sait faire.
     public enum ImageTask: String, Sendable, Equatable, CaseIterable {
         case generate = "image_generate", edit = "image_edit", upscale = "image_upscale", extend = "image_extend"
@@ -80,15 +85,18 @@ public struct EngineStatus: Sendable, Equatable {
     public let imageTasks: Set<ImageTask>?
     /// `ready.engine.image_from_chat` (D12) : une demande d'image écrite ou dite dans la conversation lance la création.
     public let imageFromChat: Bool
+    /// `ready.engine.listening` (D14). `nil` : champ absent (moteur antérieur) ou valeur inconnue.
+    public let listening: Listening?
 
     public init(dialogue: Dialogue?, voice: Voice?, images: Media?, documents: Media?, imageTasks: Set<ImageTask>? = nil,
-                imageFromChat: Bool = false) {
+                imageFromChat: Bool = false, listening: Listening? = nil) {
         self.dialogue = dialogue
         self.voice = voice
         self.images = images
         self.documents = documents
         self.imageTasks = imageTasks
         self.imageFromChat = imageFromChat
+        self.listening = listening
     }
 
     /// Le moteur comprend seul « fais-moi une image de… » : l'app ne propose plus « Créer comme image ».
@@ -136,7 +144,7 @@ public struct ServerFrame: Sendable, Equatable {
                 }
                 struct RawEngine: Decodable {
                     let dialogue: String?; let voice: String?; let images: String?; let documents: String?
-                    let image_tasks: [String]?; let image_from_chat: Bool?
+                    let image_tasks: [String]?; let image_from_chat: Bool?; let listening: String?
                 }
 
                 // Les champs ajoutés au fil des versions (grace_s est un FLOTTANT : 30.0, languages) ne
@@ -159,7 +167,8 @@ public struct ServerFrame: Sendable, Equatable {
                                      images: $0.images.flatMap(EngineStatus.Media.init(rawValue:)),
                                      documents: $0.documents.flatMap(EngineStatus.Media.init(rawValue:)),
                                      imageTasks: $0.image_tasks.map { Set($0.compactMap(EngineStatus.ImageTask.init(rawValue:))) },
-                                     imageFromChat: $0.image_from_chat ?? false)
+                                     imageFromChat: $0.image_from_chat ?? false,
+                                     listening: $0.listening.flatMap(EngineStatus.Listening.init(rawValue:)))
                     }
                 }
             }
@@ -222,18 +231,21 @@ public struct ServerFrame: Sendable, Equatable {
         case "turn_error":
             struct B: Decodable {
                 let code: String; let message: String?; let lang: String?
-                let retry_after_s: Int?
+                let retry_after_s: Int?; let utterance_id: Int?; let collected: Bool?
                 init(from decoder: Decoder) throws {
                     let c = try decoder.container(keyedBy: CodingKeys.self)
                     code = try c.decode(String.self, forKey: .code)
                     message = try? c.decodeIfPresent(String.self, forKey: .message)
                     lang = try? c.decodeIfPresent(String.self, forKey: .lang)
                     retry_after_s = try? c.decodeIfPresent(Int.self, forKey: .retry_after_s)
+                    utterance_id = try? c.decodeIfPresent(Int.self, forKey: .utterance_id)
+                    collected = try? c.decodeIfPresent(Bool.self, forKey: .collected)
                 }
-                enum CodingKeys: String, CodingKey { case code, message, lang, retry_after_s }
+                enum CodingKeys: String, CodingKey { case code, message, lang, retry_after_s, utterance_id, collected }
             }
             let b = try body(B.self)
-            event = .turnError(code: b.code, message: b.message ?? "", lang: b.lang, retryAfterSeconds: b.retry_after_s)
+            event = .turnError(code: b.code, message: b.message ?? "", lang: b.lang, retryAfterSeconds: b.retry_after_s,
+                               utteranceID: b.utterance_id, collected: b.collected)
         case "learning_state":
             struct B: Decodable {
                 let enabled: Bool; let reason: String; let deleted: Int?; let notice_version: String?

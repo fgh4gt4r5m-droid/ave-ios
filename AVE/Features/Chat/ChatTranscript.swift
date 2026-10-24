@@ -23,6 +23,25 @@ public struct ActionCard: Sendable, Equatable {
     }
 }
 
+/// D13 (maquette « Apprendre nos langues », validée le 2026-10-24) : une phrase dite dans une langue qu'AVE ne transcrit
+/// pas encore. Gardée par le moteur (accord d'aide donné) : la personne peut l'écrire ; sinon rien n'est gardé.
+public struct SpokenCollection: Sendable, Equatable {
+    public enum State: Sendable, Equatable {
+        case awaitingText
+        case sent(String)
+        case notKept
+    }
+    public let utteranceID: Int
+    public let languageName: String
+    public var state: State
+
+    public init(utteranceID: Int, languageName: String, state: State) {
+        self.utteranceID = utteranceID
+        self.languageName = languageName
+        self.state = state
+    }
+}
+
 public struct ChatMessage: Identifiable, Sendable, Equatable {
     public enum Role: Sendable, Equatable { case user, assistant, system }
     public enum Status: Sendable, Equatable { case streaming, complete, interrupted }
@@ -40,6 +59,8 @@ public struct ChatMessage: Identifiable, Sendable, Equatable {
     public var media: MediaItem?
     /// Tâche en cours ou échouée ; remplacée par `media` quand le résultat est téléchargé.
     public var task: MediaTaskCard?
+    /// D13 : phrase dite dans une langue pas encore transcrite (message système, jamais gardé dans l'historique).
+    public var collection: SpokenCollection? = nil
 }
 
 /// Construit la conversation à partir des événements serveur. Pure, testable.
@@ -110,9 +131,18 @@ public struct ChatTranscript: Sendable, Equatable {
         case .interrupted:
             finishAssistant(.interrupted)
 
-        case .turnError(let code, _, _, let retryAfter):
+        case .turnError(let code, _, let lang, let retryAfter, let utteranceID, let collected):
             finishAssistant(.interrupted)
-            appendSystem(UserMessages.turnError(code: code, retryAfterSeconds: retryAfter))
+            if let utteranceID, let collected, Self.collectionCodes.contains(code) {
+                let name = lang.flatMap(AVELanguage.init(rawValue:)).flatMap(LanguageCatalog.option(for:))?.name
+                    ?? "cette langue"
+                let collection = SpokenCollection(utteranceID: utteranceID, languageName: name,
+                                                  state: collected ? .awaitingText : .notKept)
+                append(role: .system, text: UserMessages.spokenPhrase(language: name), status: .complete,
+                       collection: collection)
+            } else {
+                appendSystem(UserMessages.turnError(code: code, retryAfterSeconds: retryAfter))
+            }
 
         case .action(let name, let args, let confirm):
             let card = ActionCard(name: name, args: args, requiresConfirmation: confirm,
@@ -182,6 +212,15 @@ public struct ChatTranscript: Sendable, Equatable {
     /// n'y en a pas. L'écran lui donne au moins la hauteur visible, pour que la réponse s'écrive sous la question.
     public var lastTurnStart: Int {
         messages.lastIndex { $0.role == .user } ?? messages.count
+    }
+
+    /// D13 : échecs de la reconnaissance qui peuvent laisser une voix gardée pour l'apprentissage.
+    static let collectionCodes: Set<String> = ["language_unavailable", "asr_failed"]
+
+    /// La phrase écrite est partie rejoindre la voix gardée.
+    public mutating func recordSpokenText(messageID: Int, text: String) {
+        guard let i = messages.firstIndex(where: { $0.id == messageID }), messages[i].collection != nil else { return }
+        messages[i].collection?.state = .sent(text)
     }
 
     public func messageID(forTaskRef ref: String) -> Int? {
@@ -279,11 +318,12 @@ public struct ChatTranscript: Sendable, Equatable {
     @discardableResult
     private mutating func append(role: ChatMessage.Role, text: String, status: ChatMessage.Status,
                                  utteranceID: Int? = nil, voiceOnly: Bool = false, card: ActionCard? = nil,
-                                 media: MediaItem? = nil, task: MediaTaskCard? = nil) -> Int {
+                                 media: MediaItem? = nil, task: MediaTaskCard? = nil,
+                                 collection: SpokenCollection? = nil) -> Int {
         let id = nextID
         nextID += 1
         messages.append(ChatMessage(id: id, role: role, text: text, status: status, utteranceID: utteranceID,
-                                    isVoiceOnly: voiceOnly, card: card, media: media, task: task))
+                                    isVoiceOnly: voiceOnly, card: card, media: media, task: task, collection: collection))
         return id
     }
 }

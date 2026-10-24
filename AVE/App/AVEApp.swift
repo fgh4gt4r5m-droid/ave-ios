@@ -187,7 +187,8 @@ struct RootView: View {
                      firstName: firstName.isEmpty ? nil : firstName, haptics: haptics,
                      onNewConversation: { Task { await newConversation(kind: kind) } },
                      onTranscriptChange: { record($0) },
-                     onRename: { title in if let id = currentConversationID { rename(id, title) } })
+                     onRename: { title in if let id = currentConversationID { rename(id, title) } },
+                     onOpenSettings: { showSettings = true })
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(session: session, coordinator: coordinator, accountKind: kind,

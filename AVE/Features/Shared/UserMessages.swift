@@ -78,12 +78,35 @@ public enum UserMessages {
     /// Sans `engine` (moteur ancien, démo hors ligne, pas encore connecté) : `fallback`, le réglage du build.
     public static func demoNotice(engine: EngineStatus?, fallback: String?) -> String? {
         guard let engine else { return fallback }
+        let base: String?
         switch (engine.dialogue == .real, engine.voice == .real) {
-        case (false, false): return demoEngine
-        case (true, false): return "Version d'essai : la voix de l'assistant est un son de test."
-        case (false, true): return "Version d'essai : l'assistant répète ce que vous dites."
-        case (true, true): return nil
+        case (false, false): base = demoEngine
+        case (true, false): base = "Version d'essai : la voix de l'assistant est un son de test."
+        case (false, true): base = "Version d'essai : l'assistant répète ce que vous dites."
+        case (true, true): base = nil
         }
+        // D14 : écoute de test (aucune reconnaissance vocale branchée) : la parole n'est pas comprise.
+        guard engine.listening == .test else { return base }
+        guard let base else { return demoListening }
+        return base + " " + demoListeningAlso
+    }
+
+    public static let demoListening = "Version d'essai : en mode vocal, AVE ne comprend pas encore ce que vous dites."
+    static let demoListeningAlso = "En mode vocal, il ne comprend pas encore ce que vous dites."
+
+    // MARK: Apprendre nos langues (D13, maquette validée le 2026-10-24)
+
+    /// `name` : nom de la langue tel qu'affiché (« Soussou ») ; mis en minuscules dans la phrase.
+    public static func spokenPhrase(language name: String) -> String { "Phrase dite en \(name.lowercased())" }
+    public static func collectionKept(language name: String) -> String {
+        "Votre phrase est gardée pour apprendre le \(name.lowercased()). Écrivez-la pour qu'AVE sache ce que vous avez dit."
+    }
+    public static func collectionThanks(language name: String) -> String {
+        "Merci : votre phrase aidera AVE à apprendre le \(name.lowercased())."
+    }
+    public static func collectionNotKept(language name: String) -> String {
+        "AVE ne comprend pas encore le \(name.lowercased()). Rien n'a été gardé : pour aider à l'apprendre, activez "
+            + "« Aider AVE à s'améliorer » dans les Réglages."
     }
 
     /// Build de démo sans moteur en ligne : les réponses viennent de l'iPhone (`DemoEngineTransport`).
@@ -99,7 +122,7 @@ public enum UserMessages {
         case "unsupported_type":
             return "Ce type de fichier n'est pas pris en charge. Envoyez une photo, un PDF, un document Word ou un texte."
         case "no_text": return "Ce PDF ne contient pas de texte lisible (c'est peut-être un scan). Envoyez plutôt une photo de la page."
-        case "language_unavailable": return "Pour l'instant, je ne traduis qu'entre le français et l'anglais."
+        case "language_unavailable": return "Pour l'instant, la traduction se fait seulement entre le français et l'anglais."
         case "content_refused": return "Je ne peux pas créer cette image. Essayez une autre demande."
         case "rights_not_confirmed": return "Cochez la case d'accord pour retoucher cette photo."
         case "moderation_unavailable":

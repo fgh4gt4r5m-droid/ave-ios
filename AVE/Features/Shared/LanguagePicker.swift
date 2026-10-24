@@ -54,8 +54,8 @@ public struct LanguagePicker: View {
 }
 
 /// Menu de titre du système (maquette « AVE tout natif », validée le 2026-10-24) : la langue en sous-titre ; un toucher
-/// sur le titre ouvre la langue (coche du système ; les langues pas encore prêtes sont grisées « Bientôt ») et
-/// « Renommer » quand la conversation a un titre.
+/// sur le titre ouvre la langue (coche du système) et « Renommer » quand la conversation a un titre. Les langues pas
+/// encore prêtes se choisissent, marquées « Bientôt » (décision du 2026-10-24 : les testeurs y enregistrent leur voix).
 struct LanguageTitleMenu: ViewModifier {
     @Binding var language: AVELanguageSelection
     let options: [LanguageOption]
@@ -63,7 +63,7 @@ struct LanguageTitleMenu: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .navigationSubtitle(LanguageCatalog.option(for: language.language)?.name ?? "Langue")
+            .navigationSubtitle(subtitle)
             .toolbarTitleMenu {
                 Section("Langue") {
                     ForEach(options) { option in
@@ -75,13 +75,19 @@ struct LanguageTitleMenu: ViewModifier {
                                 if !option.isAvailable { Text("Bientôt") }
                             }
                         }
-                        .disabled(!option.isAvailable && option.language != language.language)
                     }
                 }
                 if let onRename {
                     Button("Renommer", systemImage: "pencil", action: onRename)
                 }
             }
+    }
+
+    /// « Soussou · Bientôt » pour une langue pas encore prête.
+    private var subtitle: String {
+        let option = options.first { $0.language == language.language } ?? LanguageCatalog.option(for: language.language)
+        let name = option?.name ?? "Langue"
+        return option?.isAvailable == false ? "\(name) · Bientôt" : name
     }
 }
 

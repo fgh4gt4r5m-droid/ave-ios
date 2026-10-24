@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Premier lancement (proposition 2) : une promesse claire, puis le choix de la langue AVANT la connexion, poussé dans
 /// une pile de navigation du système. Composants d'iOS uniquement (maquette « AVE tout natif », validée le 2026-10-24) :
-/// liste à coche, langues pas encore prêtes grisées « Bientôt » comme dans le menu de titre (statut de la liste de
-/// repli : le serveur n'est pas encore joint à ce moment-là).
+/// liste à coche ; les langues pas encore prêtes se choisissent, marquées « Bientôt », comme dans le menu de titre
+/// (statut de la liste de repli : le serveur n'est pas encore joint à ce moment-là).
 public struct OnboardingView: View {
     let onFinish: (AVELanguage) -> Void
     @State private var choosing = false
@@ -82,8 +82,6 @@ public struct OnboardingView: View {
                         }
                         .tag(option.language)
                         .badge(option.isAvailable ? nil : Text("Bientôt"))
-                        .selectionDisabled(!option.isAvailable)
-                        .foregroundStyle(option.isAvailable ? Color.primary : Color.secondary)
                     }
                 }
                 .pickerStyle(.inline)
