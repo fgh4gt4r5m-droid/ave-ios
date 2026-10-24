@@ -194,8 +194,8 @@ Retour du propriétaire sur iPhone : l'app doit avoir la même sensation que Cha
 trahir une construction automatique. Code : `ChatView` (défilement), `RichText` + `StreamReveal` (écriture),
 `MediaViews` (image), `AVEApp.record` (historique). Tests : `AssistantFeaturesTests`, `MediaTests`.
 1. **Écriture** : la réponse se dévoile à cadence régulière (un fragment de 120 caractères en 0,5 s) au lieu d'apparaître
-   par fragments ; d'un coup avec « Réduire les animations ». Le moteur envoie un fragment toutes les 100 ms (PR #40 :
-   40 ms, en attente du oui du propriétaire dans la session moteur).
+   par fragments ; d'un coup avec « Réduire les animations ». Le moteur envoie un fragment toutes les ≈ 40 ms (PR #40,
+   en ligne @ 5d5e6c6 : 18 à 21 caractères médians, ≈ 110 fragments par réponse ; avant : 100 ms et ≈ 42 caractères).
 2. **Historique** : enregistré quand le fil se pose (réponse finie, ou 1,5 s sans changement), hors du fil principal,
    dans l'ordre. Avant : chaque fragment réécrivait toute la conversation et reconstruisait l'écran (saccades).
 3. **Défilement** : à l'envoi, la question monte en haut ; le dernier échange occupe au moins la hauteur visible ; rien
