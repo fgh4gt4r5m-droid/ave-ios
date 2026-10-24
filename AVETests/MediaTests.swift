@@ -589,5 +589,10 @@ struct ImageInConversationTests {
         t.applyTask(.taskStarted(MediaTaskStarted(taskID: "t_9", ref: "r_perdu", kind: .imageGenerate, estimatedSeconds: 30)))
         t.applyTask(.taskStarted(MediaTaskStarted(taskID: "t_10", ref: "chat:6", kind: .documentTransform, estimatedSeconds: 5)))
         #expect(t.messages.count == 1)
+        // La phrase du tour 5 arrive après la carte : elle passe devant, la carte reste en cours après la fin du tour.
+        t.apply(.replyText(utteranceID: 5, text: "Je m'occupe de te créer cette image.\n\n", lang: "fra"))
+        t.apply(.turnEnd(utteranceID: 5, interrupted: false))
+        #expect(t.messages.map { $0.task == nil } == [true, false])
+        #expect(t.messages.last?.task?.state == .working(startedAt: now, estimatedSeconds: 35))
     }
 }

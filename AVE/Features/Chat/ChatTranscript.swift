@@ -254,7 +254,14 @@ public struct ChatTranscript: Sendable, Equatable {
                 messages[i].text += text
             }
         } else {
-            currentAssistantID = append(role: .assistant, text: text, status: .streaming, utteranceID: utteranceID)
+            let id = append(role: .assistant, text: text, status: .streaming, utteranceID: utteranceID)
+            // D12 : la carte d'une image lancée pendant ce tour peut arriver avant la phrase qui l'annonce
+            // (« Je m'occupe de te créer cette image. ») ; la phrase passe devant, comme dans une réponse lue.
+            let last = messages.count - 1
+            if last > 0, messages[last - 1].task?.ref == MediaTaskCard.chatRefPrefix + String(utteranceID) {
+                messages.swapAt(last, last - 1)
+            }
+            currentAssistantID = id
         }
     }
 
