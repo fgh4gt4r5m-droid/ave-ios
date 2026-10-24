@@ -21,7 +21,8 @@ struct RootView: View {
     @State private var language = AVELanguageSelection()
     @State private var failure: String?
     @State private var showSettings = false
-    @State private var showHistory = false
+    /// Colonne montrée sur iPhone : la conversation, ou l'historique (bouton retour).
+    @State private var historyColumn: NavigationSplitViewColumn = .detail
     /// Vrai quand le faux service de comptes est utilisé : un bandeau le dit sur l'écran de connexion.
     @State private var usingDevAccounts = false
     /// Historique gardé sur l'iPhone (`nil` si le dossier de l'app est inaccessible : l'app marche sans historique).
@@ -156,54 +157,44 @@ struct RootView: View {
 
     // MARK: Écran connecté : conversation + historique
 
+    /// L'historique est la colonne latérale d'un `NavigationSplitView` (maquette « AVE tout natif », validée le
+    /// 2026-10-24) : sur iPhone, l'app s'ouvre sur la conversation et le bouton retour mène à l'historique ; sur iPad,
+    /// c'est une barre latérale. Réglages et Nouvelle conversation : boutons de la barre du haut.
     private func signedIn(coordinator: SessionCoordinator, session: AuthSession, kind: AccountKind) -> some View {
-        ZStack(alignment: .leading) {
+        NavigationSplitView(preferredCompactColumn: $historyColumn) {
+            HistoryList(
+                conversations: conversations,
+                selection: Binding(get: { currentConversationID }, set: { id in
+                    guard let id, let conversation = conversations.first(where: { $0.id == id }) else { return }
+                    historyColumn = .detail
+                    Task { await open(conversation, kind: kind) }
+                }),
+                onRename: rename, onDelete: delete)
+            .navigationTitle("Historique")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Réglages", systemImage: "gearshape") { showSettings = true }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Nouvelle conversation", systemImage: "square.and.pencil") {
+                        Task { await newConversation(kind: kind) }
+                    }
+                }
+            }
+        } detail: {
             ChatView(coordinator: coordinator, language: $language, captions: $captions,
                      title: conversations.first(where: { $0.id == currentConversationID })?.title,
                      firstName: firstName.isEmpty ? nil : firstName, haptics: haptics,
-                     onShowHistory: { showHistory = true },
                      onNewConversation: { Task { await newConversation(kind: kind) } },
-                     onTranscriptChange: { record($0) })
-            if showHistory {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture { showHistory = false }
-                    .accessibilityLabel("Fermer l'historique")
-                    .accessibilityAddTraits(.isButton)
-                    .transition(.opacity)
-                HistoryDrawer(
-                    conversations: conversations, currentID: currentConversationID,
-                    profileName: firstName.isEmpty ? "Mon compte" : firstName,
-                    accountLabel: Self.label(of: kind),
-                    onSelect: { conversation in Task { await open(conversation, kind: kind) } },
-                    onNew: { Task { await newConversation(kind: kind) } },
-                    onRename: rename, onDelete: delete,
-                    onSettings: {
-                        showHistory = false
-                        showSettings = true
-                    })
-                .frame(width: 320)
-                .frame(maxHeight: .infinity)
-                .background(Color(.systemBackground).ignoresSafeArea())
-                .gesture(DragGesture().onEnded { if $0.translation.width < -60 { showHistory = false } })
-                .transition(.move(edge: .leading))
-            }
+                     onTranscriptChange: { record($0) },
+                     onRename: { title in if let id = currentConversationID { rename(id, title) } })
         }
-        .animation(.spring(duration: 0.3), value: showHistory)
         .sheet(isPresented: $showSettings) {
             SettingsView(session: session, coordinator: coordinator, accountKind: kind,
                          firstName: $firstName, language: $language, autoPlay: $autoPlay, captions: $captions,
                          haptics: $haptics,
                          appearance: Binding(get: { appearance }, set: { appearanceRaw = $0.rawValue }),
                          keepHistory: $keepHistory, onClearHistory: clearHistory, appIcons: AppIconChoice.ave)
-        }
-    }
-
-    private static func label(of kind: AccountKind) -> String {
-        switch kind {
-        case .phone: return "Connecté avec votre numéro"
-        case .apple: return "Connecté avec Apple"
-        case .guest: return "Essai sans compte"
         }
     }
 
@@ -299,7 +290,7 @@ struct RootView: View {
 
     /// « Nouvelle conversation » : un client = une session côté moteur ; on arrête l'ancienne et on en crée une neuve.
     private func newConversation(kind: AccountKind) async {
-        showHistory = false
+        historyColumn = .detail
         flushRecord()
         currentConversationID = nil
         await rebuild(kind: kind, transcript: ChatTranscript())
@@ -307,7 +298,7 @@ struct RootView: View {
 
     /// Rouvre une conversation de l'historique : affichée telle quelle, l'assistant repart sans mémoire (et le dit).
     private func open(_ conversation: StoredConversation, kind: AccountKind) async {
-        showHistory = false
+        historyColumn = .detail
         guard conversation.id != currentConversationID else { return }
         flushRecord()
         currentConversationID = conversation.id

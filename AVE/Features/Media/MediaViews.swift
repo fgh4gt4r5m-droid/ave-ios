@@ -2,6 +2,7 @@
 import AVECore
 import Photos
 import QuickLook
+import QuickLookThumbnailing
 import SwiftUI
 
 /// Feuilles des fichiers et images, ouvertes par la conversation (`ChatView`).
@@ -42,7 +43,7 @@ struct AttachmentDraftRow: View {
                         .frame(width: 40, height: 40)
                         .clipShape(.rect(cornerRadius: 8))
                 } else {
-                    DocumentIcon(title: draft.title).frame(width: 40, height: 40)
+                    DocumentIcon(url: url).frame(width: 40, height: 40)
                 }
                 ProgressView().controlSize(.small)
             }
@@ -181,7 +182,7 @@ struct AttachmentBubble: View {
                     }
                     .buttonStyle(.plain)
                 } else {
-                    DocumentIcon(title: media.title).frame(width: 44, height: 44)
+                    DocumentIcon(url: url).frame(width: 44, height: 44)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(media.title).font(.subheadline.weight(.semibold)).lineLimit(2)
@@ -256,12 +257,7 @@ struct AttachmentActions: View {
     }
 
     private func chip(_ title: String, _ symbol: String) -> some View {
-        Label(title, systemImage: symbol)
-            .font(.subheadline.weight(.medium))
-            .padding(.horizontal, 14)
-            .frame(minHeight: 44)
-            .background(Color(.secondarySystemBackground), in: .capsule)
-            .contentShape(.capsule)
+        Label(title, systemImage: symbol).font(.subheadline.weight(.medium))
     }
 }
 
@@ -271,7 +267,9 @@ struct FlowChips<Content: View>: View {
 
     var body: some View {
         FlowLayout(spacing: 8) { content }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .menuStyle(.button)
             .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
@@ -355,6 +353,11 @@ struct TaskCardView: View {
     }
 
     private var working: some View {
+        GroupBox { workingContent }
+            .accessibilityElement(children: .contain)
+    }
+
+    private var workingContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 AVELiveMark(phase: .thinking).frame(width: 32, height: 32).accessibilityHidden(true)
@@ -371,13 +374,11 @@ struct TaskCardView: View {
             if card.canCancel {
                 Button("Annuler", action: onCancel)
                     .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
                     .controlSize(.small)
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.assistantBubble, in: .rect(cornerRadius: theme.cornerRadius))
-        .accessibilityElement(children: .contain)
     }
 
     private var title: String {
@@ -575,7 +576,7 @@ struct DocumentResultView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                DocumentIcon(title: media.title).frame(width: 40, height: 40)
+                DocumentIcon(url: url).frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(media.title).font(.subheadline.weight(.semibold)).lineLimit(2)
                     Text(MediaFormat.detail(media)).font(.caption).foregroundStyle(.secondary)
@@ -671,19 +672,38 @@ private struct DecodedImage: @unchecked Sendable {
     let image: CGImage?
 }
 
+/// La première page du document, rendue par l'aperçu du système (maquette « AVE tout natif », validée le 2026-10-24) ;
+/// tant qu'elle n'est pas prête, ou si iOS ne sait pas la rendre, le symbole de document du système.
 struct DocumentIcon: View {
-    let title: String
+    let url: URL?
+    @State private var thumbnail: CGImage?
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        let ext = (title as NSString).pathExtension.uppercased()
-        RoundedRectangle(cornerRadius: 8)
-            .fill(Color(.tertiarySystemFill))
-            .overlay {
-                Text(ext.isEmpty ? "DOC" : String(ext.prefix(4)))
-                    .font(.caption2.weight(.bold))
+        Group {
+            if let thumbnail {
+                Image(decorative: thumbnail, scale: displayScale).resizable().scaledToFit()
+            } else {
+                Image(systemName: "doc.text.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.secondary)
+                    .padding(6)
             }
-            .accessibilityHidden(true)
+        }
+        .accessibilityHidden(true)
+        .task(id: url) {
+            guard let url else { return }
+            let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 44, height: 56),
+                                                       scale: displayScale, representationTypes: .thumbnail)
+            let decoded: DecodedImage = await withCheckedContinuation { continuation in
+                QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+                    continuation.resume(returning: DecodedImage(image: representation?.cgImage))
+                }
+            }
+            thumbnail = decoded.image
+        }
     }
 }
 

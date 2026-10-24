@@ -13,7 +13,6 @@ struct VoiceModeView: View {
     @Binding var language: AVELanguageSelection
     @Binding var captions: Bool
     let haptics: Bool
-    @State private var showLanguages = false
     @Environment(\.aveTheme) private var theme
 
     private var state: OrbState { coordinator.orbState }
@@ -50,32 +49,13 @@ struct VoiceModeView: View {
             .animation(.easeInOut(duration: 0.2), value: state)
             .animation(.easeInOut(duration: 0.2), value: captions)
             .sensoryFeedback(.impact(weight: .light), trigger: state) { _, new in haptics && (new == .listening || new == .thinking) }
-            .toolbar {
-                // La langue en haut, au centre : le même titre à menu que la conversation.
-                ToolbarItem(placement: .principal) {
-                    Button { showLanguages = true } label: {
-                        VStack(spacing: 0) {
-                            Text("AVE").font(.headline)
-                            HStack(spacing: 3) {
-                                Text(LanguageCatalog.option(for: language.language)?.name ?? "Langue")
-                                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                        .frame(minHeight: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Langue : \(LanguageCatalog.option(for: language.language)?.name ?? "non choisie")")
-                }
-            }
+            // Le même menu de titre que la conversation : la langue en sous-titre, choisie d'un toucher sur « AVE ».
+            .navigationTitle("AVE")
+            .navigationBarTitleDisplayMode(.inline)
+            .modifier(LanguageTitleMenu(language: $language, options: coordinator.languageOptions, onRename: nil))
         }
         // Toujours sombre, comme un appel : la lumière se voit, rien d'autre ne bouge.
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showLanguages) {
-            LanguagePicker(selection: $language, options: coordinator.languageOptions)
-                .presentationDetents([.medium, .large])
-        }
     }
 
     /// Le logo vivant remplace l'orbe : au repos l'Afrique en barres ; en écoute un cercle, en réflexion une onde, en

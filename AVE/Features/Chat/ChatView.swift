@@ -31,8 +31,12 @@ public struct ChatView: View {
     let onNewConversation: (() -> Void)?
     /// Appelé quand le fil change : l'app hôte l'enregistre dans l'historique.
     let onTranscriptChange: (([ChatMessage]) -> Void)?
+    /// « Renommer » dans le menu de titre. `nil` : pas d'historique, rien à renommer.
+    let onRename: ((String) -> Void)?
     @State private var draft = ""
-    @State private var showLanguages = false
+    /// « Renommer » du menu de titre : un champ dans une alerte du système.
+    @State private var renaming = false
+    @State private var newTitle = ""
     @State private var correctionTarget: Int?
     @State private var sentCount = 0
     @State private var mediaSheet: MediaSheet?
@@ -55,7 +59,7 @@ public struct ChatView: View {
     public init(coordinator: SessionCoordinator, language: Binding<AVELanguageSelection>,
                 captions: Binding<Bool> = .constant(true), title: String? = nil, firstName: String? = nil,
                 haptics: Bool = true, onShowHistory: (() -> Void)? = nil, onNewConversation: (() -> Void)? = nil,
-                onTranscriptChange: (([ChatMessage]) -> Void)? = nil) {
+                onTranscriptChange: (([ChatMessage]) -> Void)? = nil, onRename: ((String) -> Void)? = nil) {
         self.coordinator = coordinator
         self._language = language
         self._captions = captions
@@ -65,18 +69,29 @@ public struct ChatView: View {
         self.onShowHistory = onShowHistory
         self.onNewConversation = onNewConversation
         self.onTranscriptChange = onTranscriptChange
+        self.onRename = onRename
     }
 
     public var body: some View {
         NavigationStack {
             messages
                 .safeAreaBar(edge: .bottom) { composer }
+                .navigationTitle(title ?? "AVE")
                 .navigationBarTitleDisplayMode(.inline)
+                .modifier(LanguageTitleMenu(language: $language, options: coordinator.languageOptions,
+                                            onRename: title != nil && onRename != nil ? {
+                                                newTitle = title ?? ""
+                                                renaming = true
+                                            } : nil))
                 .toolbar { toolbarContent }
         }
-        .sheet(isPresented: $showLanguages) {
-            LanguagePicker(selection: $language, options: coordinator.languageOptions)
-                .presentationDetents([.medium, .large])
+        .alert("Renommer la conversation", isPresented: $renaming) {
+            TextField("Titre", text: $newTitle)
+            Button("Annuler", role: .cancel) {}
+            Button("Renommer") {
+                let cleaned = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleaned.isEmpty { onRename?(cleaned) }
+            }
         }
         .sheet(isPresented: Binding(get: { coordinator.learningPrompt != nil },
                                     set: { if !$0 { coordinator.dismissLearningPrompt() } })) {
@@ -137,33 +152,11 @@ public struct ChatView: View {
 
     // MARK: Barre du haut (Liquid Glass fournie par le système)
 
-    private var languageName: String {
-        LanguageCatalog.option(for: language.language)?.name ?? "Langue"
-    }
-
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         if let onShowHistory {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Historique", systemImage: "line.3.horizontal", action: onShowHistory)
             }
-        }
-        ToolbarItem(placement: .principal) {
-            // Comme le choix du modèle dans ChatGPT : le titre, et dessous ce qu'on peut changer (la langue).
-            Button { showLanguages = true } label: {
-                VStack(spacing: 0) {
-                    Text(title ?? "AVE").font(.headline).lineLimit(1)
-                    HStack(spacing: 3) {
-                        Text(languageName)
-                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: 220, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(title ?? "AVE"), langue : \(languageName)")
-            .accessibilityHint("Choisir la langue de la conversation.")
         }
         if let onNewConversation {
             ToolbarItem(placement: .topBarTrailing) {
@@ -840,7 +833,8 @@ struct PendingBubble: View {
     }
 }
 
-/// Avis à lire en tête de conversation : icône + texte + fermeture.
+/// Avis à lire en tête de conversation : boîte de groupe du système (maquette « AVE tout natif », validée le
+/// 2026-10-24), icône, texte et fermeture.
 struct NoticeBanner: View {
     let text: String
     let systemImage: String
@@ -848,23 +842,23 @@ struct NoticeBanner: View {
     @Environment(\.aveTheme) private var theme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: systemImage)
-                .foregroundStyle(theme.warning)
-                .accessibilityHidden(true)
-            Text(text).font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
-            if let onDismiss {
-                Button("Fermer", systemImage: "xmark", action: onDismiss)
-                    .labelStyle(.iconOnly)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-                    .padding(.vertical, -12)
+        GroupBox {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: systemImage)
+                    .symbolRenderingMode(.multicolor)
+                    .foregroundStyle(theme.warning)
+                    .accessibilityHidden(true)
+                Text(text).font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
+                if let onDismiss {
+                    Button("Fermer", systemImage: "xmark", action: onDismiss)
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .tint(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .padding(.vertical, -12)
+                }
             }
         }
-        .padding(14)
-        .background(theme.assistantBubble, in: .rect(cornerRadius: 16))
         .accessibilityElement(children: .combine)
     }
 }

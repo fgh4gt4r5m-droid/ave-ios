@@ -207,3 +207,25 @@ trahir une construction automatique. Code : `ChatView` (défilement), `RichText`
    échouée (« avertissement ») ; aucune pendant l'écriture. Le coordinateur compte les événements, la vue vibre.
 6. **Textes** : plus de « je » dans les messages d'erreur, plus de mots internes (« moteur », « l'IA ») ; le bouton
    d'envoi est un bouton Liquid Glass du système.
+
+## Tout natif (maquette « AVE tout natif », validée le 2026-10-24)
+Exigence du propriétaire : rien de dessiné à la main, uniquement des composants d'iOS 27. Restent tels quels parce que
+ce sont des contenus : le symbole d'AVE et ses animations, le mot AVE, la lumière douce, les bulles, les aperçus
+d'icône et d'image.
+1. **Historique** (`History/HistoryList.swift`, `AVEApp.signedIn`) : colonne latérale d'un `NavigationSplitView`
+   (iPhone : l'app s'ouvre sur la conversation, le bouton retour mène à l'historique ; iPad : barre latérale). `List`
+   à sélection du système, sections par jour, date courte à droite comme Mail (`ConversationHistory.shortDate`,
+   testé), `.searchable`, balayage Supprimer / Renommer, appui long. Réglages et Nouvelle conversation dans la barre
+   du haut. Plus de tiroir, de voile ni de pastille de profil dessinés.
+2. **Titre et langue** (`LanguageTitleMenu`) : `navigationTitle` + `navigationSubtitle` (la langue) + menu de titre du
+   système (langues, coche, « Bientôt » grisé ; Renommer). Même menu en mode vocal. La feuille de langue n'est plus
+   ouverte depuis la conversation (elle reste dans Réglages).
+3. **Saisie du code** : un seul `TextField` en grands chiffres dans un formulaire (`oneTimeCode`, vérifié dès qu'il est
+   complet), en-tête « Envoyé au … », pied « Renvoyer », ligne « Changer de numéro ».
+4. **Cartes** : avis, carte de tâche et carte d'action dans des `GroupBox` ; raccourcis sous un fichier en boutons
+   `.bordered` en capsule (les menus aussi) ; document : première page rendue par `QLThumbnailGenerator`, symbole du
+   système en attendant.
+5. **Réglages** : icône de l'app en `Picker` à coche (`.inline`), sans cadre dessiné.
+6. **Premier lancement** : le choix de la langue est poussé dans une pile de navigation, en liste à coche ; plus de
+   tuiles ni de points de page dessinés.
+7. **Boutons** : envoi et orbe vocale des apps hôtes (`FloatingVoiceOrbView`) en boutons Liquid Glass du système.

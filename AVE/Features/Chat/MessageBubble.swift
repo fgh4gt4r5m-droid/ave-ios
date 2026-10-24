@@ -172,9 +172,16 @@ struct ActionCardView: View {
     @Environment(\.aveTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        GroupBox {
+            content
+        } label: {
             Label("Action proposée : \(card.name)", systemImage: "bolt.fill")
-                .font(.headline)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
             if !card.summary.isEmpty {
                 Text(card.summary).font(.subheadline).foregroundStyle(.secondary)
             }
@@ -198,9 +205,7 @@ struct ActionCardView: View {
                 Label("Refusée", systemImage: "xmark.circle.fill").foregroundStyle(.secondary)
             }
         }
-        .padding(16)
-        .background(theme.assistantBubble, in: .rect(cornerRadius: theme.cornerRadius))
-        .accessibilityElement(children: .contain)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 #endif

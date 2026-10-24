@@ -31,6 +31,19 @@ struct HistoryTests {
         #expect(groups.map { $0.items.map(\.title) } == [["a"], ["b"], ["c"], ["d"]])
     }
 
+    @Test("date courte d'une ligne, comme Mail : heure, « Hier », jour de la semaine, puis la date")
+    func shortDate() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Africa/Conakry"))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 15, minute: 4)))
+        func daysAgo(_ d: Int) throws -> Date { try #require(calendar.date(byAdding: .day, value: -d, to: now)) }
+        #expect(ConversationHistory.shortDate(now, now: now, calendar: calendar) == "15:04")
+        #expect(ConversationHistory.shortDate(try daysAgo(1), now: now, calendar: calendar) == "Hier")
+        #expect(ConversationHistory.shortDate(try daysAgo(5), now: now, calendar: calendar).hasPrefix("dim"))  // dimanche 18
+        let old = ConversationHistory.shortDate(try daysAgo(40), now: now, calendar: calendar)  // 13 septembre
+        #expect(old.contains("13") && old.contains("sept"))
+    }
+
     @Test("recherche : titres et messages, sans accents ni majuscules")
     func search() {
         let now = Date()

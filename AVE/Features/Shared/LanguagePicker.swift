@@ -53,6 +53,38 @@ public struct LanguagePicker: View {
     }
 }
 
+/// Menu de titre du système (maquette « AVE tout natif », validée le 2026-10-24) : la langue en sous-titre ; un toucher
+/// sur le titre ouvre la langue (coche du système ; les langues pas encore prêtes sont grisées « Bientôt ») et
+/// « Renommer » quand la conversation a un titre.
+struct LanguageTitleMenu: ViewModifier {
+    @Binding var language: AVELanguageSelection
+    let options: [LanguageOption]
+    let onRename: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .navigationSubtitle(LanguageCatalog.option(for: language.language)?.name ?? "Langue")
+            .toolbarTitleMenu {
+                Section("Langue") {
+                    ForEach(options) { option in
+                        Button { language.language = option.language } label: {
+                            if option.language == language.language {
+                                Label(option.name, systemImage: "checkmark")
+                            } else {
+                                Text(option.name)
+                                if !option.isAvailable { Text("Bientôt") }
+                            }
+                        }
+                        .disabled(!option.isAvailable && option.language != language.language)
+                    }
+                }
+                if let onRename {
+                    Button("Renommer", systemImage: "pencil", action: onRename)
+                }
+            }
+    }
+}
+
 private extension View {
     @ViewBuilder func navigationBarTitleDisplayModeInline() -> some View {
         #if os(iOS)

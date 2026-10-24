@@ -2,12 +2,13 @@
 import AVECore
 import SwiftUI
 
-/// Premier lancement (proposition 2) : une promesse claire, puis le choix de la langue AVANT la connexion. Grandes
-/// tuiles avec le nom local et le statut RÉEL (liste de repli : le serveur n'est pas encore joint à ce moment-là).
-/// Une langue « Bientôt » reste choisissable, et l'app le dit ensuite dans la conversation.
+/// Premier lancement (proposition 2) : une promesse claire, puis le choix de la langue AVANT la connexion, poussé dans
+/// une pile de navigation du système. Composants d'iOS uniquement (maquette « AVE tout natif », validée le 2026-10-24) :
+/// liste à coche, langues pas encore prêtes grisées « Bientôt » comme dans le menu de titre (statut de la liste de
+/// repli : le serveur n'est pas encore joint à ce moment-là).
 public struct OnboardingView: View {
     let onFinish: (AVELanguage) -> Void
-    @State private var page = 0
+    @State private var choosing = false
     @State private var selection: AVELanguage = .french
     @Environment(\.aveTheme) private var theme
 
@@ -20,31 +21,27 @@ public struct OnboardingView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 18) {
-            if page == 0 { welcome } else { languages }
-            HStack(spacing: 6) {
-                ForEach(0..<2) { index in
-                    Capsule()
-                        .fill(index == page ? Color.primary : Color.secondary.opacity(0.35))
-                        .frame(width: index == page ? 20 : 7, height: 7)
+        NavigationStack {
+            welcome
+                .safeAreaBar(edge: .bottom) {
+                    primaryButton("Commencer") { choosing = true }
                 }
-            }
-            .accessibilityHidden(true)
-            Button {
-                if page == 0 { withAnimation { page = 1 } } else { onFinish(selection) }
-            } label: {
-                Text(page == 0 ? "Commencer" : "Continuer")
-                    .font(.headline)
-                    .foregroundStyle(theme.onAccent)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(theme.accent)
-            .controlSize(.large)
+                .navigationDestination(isPresented: $choosing) { languages }
         }
+    }
+
+    private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(theme.onAccent)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(theme.accent)
+        .controlSize(.large)
         .padding(.horizontal, 24)
-        .padding(.bottom, 16)
-        .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
+        .padding(.bottom, 8)
     }
 
     /// Bienvenue (maquette d'entrée validée le 2026-10-23) : le logo naît puis se pose au repos, le mot AVE s'écrit
@@ -67,48 +64,39 @@ public struct OnboardingView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .transition(.opacity)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity)
+        .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
     }
 
     private var languages: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Dans quelle langue voulez-vous parler ?")
-                    .font(.largeTitle.weight(.bold))
-                    .padding(.top, 40)
-                Text("Vous pourrez la changer à tout moment.").foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        Form {
+            Section {
+                Picker("Langue", selection: $selection) {
                     ForEach(options) { option in
-                        tile(option)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.name)
+                            if let native = option.nativeName {
+                                Text(native).font(.footnote).foregroundStyle(.secondary)
+                            }
+                        }
+                        .tag(option.language)
+                        .badge(option.isAvailable ? nil : Text("Bientôt"))
+                        .selectionDisabled(!option.isAvailable)
+                        .foregroundStyle(option.isAvailable ? Color.primary : Color.secondary)
                     }
                 }
-                .padding(.top, 14)
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } footer: {
+                Text("Vous pourrez la changer à tout moment, d'un toucher sur le titre de la conversation.")
             }
         }
-        .transition(.opacity)
-    }
-
-    private func tile(_ option: LanguageOption) -> some View {
-        let selected = option.language == selection
-        return Button { selection = option.language } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(option.name).font(.headline)
-                if let native = option.nativeName { Text(native).font(.footnote).foregroundStyle(.secondary) }
-                Label(option.isAvailable ? "Disponible" : "Bientôt",
-                      systemImage: option.isAvailable ? "checkmark.circle.fill" : "clock")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(option.isAvailable ? Color.green : theme.warning)
-            }
-            .frame(maxWidth: .infinity, minHeight: 74, alignment: .topLeading)
-            .padding(14)
-            .background(theme.assistantBubble, in: .rect(cornerRadius: 16))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16).strokeBorder(selected ? theme.accent : .clear, lineWidth: 2)
-            }
+        .navigationTitle("Votre langue")
+        .navigationBarTitleDisplayMode(.large)
+        .safeAreaBar(edge: .bottom) {
+            primaryButton("Continuer") { onFinish(selection) }
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityHint(option.isAvailable ? "" : "Pas encore disponible : l'assistant ne pourra pas répondre.")
     }
 }
 #endif

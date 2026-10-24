@@ -169,40 +169,29 @@ public struct SettingsView: View {
 
     // MARK: Icône de l'app
 
-    /// Grille d'aperçus, comme le choix d'icône des apps d'Apple : on touche, l'icône change sur l'écran d'accueil
-    /// (iOS affiche lui-même une confirmation).
+    /// Liste à coche du système (maquette « AVE tout natif », validée le 2026-10-24) : on touche une ligne, l'icône
+    /// change sur l'écran d'accueil (iOS affiche lui-même une confirmation). Les aperçus sont des images, sans cadre.
     private var appIconSection: some View {
         Section {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 16) {
+            Picker("Icône de l'app", selection: Binding(
+                get: { appIcons.first { $0.alternateName == currentIcon }?.id ?? "" },
+                set: { id in if let choice = appIcons.first(where: { $0.id == id }) { choose(choice) } }
+            )) {
                 ForEach(appIcons) { choice in
-                    let selected = choice.alternateName == currentIcon
-                    Button { choose(choice) } label: {
-                        VStack(spacing: 6) {
-                            Image(choice.previewImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 64, height: 64)
-                                .clipShape(.rect(cornerRadius: 14.4))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 14.4)
-                                        .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.25),
-                                                      lineWidth: selected ? 3 : 0.5)
-                                }
-                            Text(choice.title)
-                                .font(.caption2)
-                                .foregroundStyle(selected ? .primary : .secondary)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(.rect)
+                    Label {
+                        Text(choice.title)
+                    } icon: {
+                        Image(choice.previewImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 44, height: 44)
+                            .clipShape(.rect(cornerRadius: 10, style: .continuous))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Icône \(choice.title)")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .tag(choice.id)
                 }
             }
-            .padding(.vertical, 6)
+            .pickerStyle(.inline)
+            .labelsHidden()
         } header: {
             Text("Icône de l'app")
         } footer: {

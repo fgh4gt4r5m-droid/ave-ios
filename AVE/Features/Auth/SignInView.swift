@@ -172,59 +172,40 @@ public struct SignInView: View {
 
     // MARK: Code
 
-    /// Six cases ; le code reçu par SMS se propose au-dessus du clavier (`oneTimeCode`) et il est validé dès qu'il est
-    /// complet, sans bouton. Un vrai champ texte, invisible, reçoit la saisie : VoiceOver et le collage marchent.
+    /// Un seul champ du système, en grands chiffres (maquette « AVE tout natif », validée le 2026-10-24 : plus de cases
+    /// dessinées). Le code reçu par SMS se propose au-dessus du clavier (`oneTimeCode`) et il est vérifié dès qu'il est
+    /// complet, sans bouton. Coller et VoiceOver marchent comme dans tout champ d'iOS.
     private func code(_ masked: String) -> some View {
-        VStack(spacing: 20) {
-            Text("Envoyé au \(masked)")
-                .foregroundStyle(.secondary)
-            codeBoxes
-            resendLine
-            if let message = model.errorMessage { errorText(message) }
-            Button("Changer de numéro") { model.back() }
-                .font(.headline)
-                .frame(minHeight: 44)
-                .tint(theme.accent)
-            Spacer()
+        Form {
+            Section {
+                TextField("Code à \(SignInViewModel.codeLength) chiffres", text: $model.codeInput,
+                          prompt: Text(String(repeating: "–", count: SignInViewModel.codeLength)))
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .font(.largeTitle.weight(.semibold))
+                    .monospacedDigit()
+                    .tracking(12)
+                    .multilineTextAlignment(.center)
+                    .focused($fieldFocused)
+                    .frame(minHeight: 64)
+            } header: {
+                Text("Envoyé au \(masked)")
+            } footer: {
+                resendLine
+            }
+            if let message = model.errorMessage {
+                Section { errorText(message) }
+            }
+            Section {
+                Button("Changer de numéro") { model.back() }
+            }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
         .navigationTitle("Entrez le code")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear { fieldFocused = true }
         .onChange(of: model.codeInput) { _, _ in
             if model.codeDidChange() { Task { await model.verifyCode() } }
         }
-    }
-
-    private var codeBoxes: some View {
-        let digits = Array(model.codeInput)
-        return ZStack {
-            HStack(spacing: 8) {
-                ForEach(0..<SignInViewModel.codeLength, id: \.self) { index in
-                    Text(index < digits.count ? String(digits[index]) : "")
-                        .font(.title.weight(.semibold))
-                        .monospacedDigit()
-                        .minimumScaleFactor(0.5)
-                        .frame(width: 46, height: 56)
-                        .background(theme.assistantBubble, in: .rect(cornerRadius: 12))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(fieldFocused && index == min(digits.count, SignInViewModel.codeLength - 1)
-                                              ? theme.accent : Color.clear, lineWidth: 2)
-                        }
-                }
-            }
-            .accessibilityHidden(true)
-            TextField("Code reçu", text: $model.codeInput)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .focused($fieldFocused)
-                .foregroundStyle(.clear)
-                .tint(.clear)
-                .frame(height: 56)
-        }
-        .contentShape(.rect)
-        .onTapGesture { fieldFocused = true }
     }
 
     /// Décompte avant de pouvoir redemander un code, puis « Renvoyer un code ».
@@ -238,7 +219,6 @@ public struct SignInView: View {
                 Button("Renvoyer un code") { Task { await model.resendCode() } }
                     .font(.footnote.weight(.semibold))
                     .frame(minHeight: 44)
-                    .tint(theme.accent)
             }
         }
     }

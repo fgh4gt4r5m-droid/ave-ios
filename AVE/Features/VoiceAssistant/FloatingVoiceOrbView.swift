@@ -1,8 +1,8 @@
 #if os(iOS)
 import SwiftUI
 
-/// Orbe vocal. L'état est porté par le symbole ET le libellé, jamais par la couleur seule.
-/// Deux halos suivent le niveau audio ; « Réduire les animations » les fige. Cible tactile d'au moins 44 pt.
+/// Orbe vocal des apps hôtes : un bouton rond Liquid Glass du système. L'état est porté par le symbole ET le libellé,
+/// jamais par la couleur seule ; le niveau audio anime le symbole. Cible tactile d'au moins 44 pt.
 public struct FloatingVoiceOrbView: View {
     public let state: OrbState
     /// Niveau 0…1 (micro en écoute, lecture en parole).
@@ -28,29 +28,21 @@ public struct FloatingVoiceOrbView: View {
     }
 
     public var body: some View {
+        // Bouton Liquid Glass du système (exigence du propriétaire, 2026-10-24 : rien de dessiné à la main) ; le son
+        // se voit par l'effet variable du symbole, figé avec « Réduire les animations ».
         Button(action: onTap) {
-            ZStack {
-                Circle()
-                    .fill(theme.accent.opacity(0.10))
-                    .frame(width: diameter * (1.55 + 0.25 * amplitude), height: diameter * (1.55 + 0.25 * amplitude))
-                Circle()
-                    .fill(theme.accent.opacity(0.20))
-                    .frame(width: diameter * (1.27 + 0.15 * amplitude), height: diameter * (1.27 + 0.15 * amplitude))
-                Circle()
-                    .fill(theme.accent.opacity(state == .unavailable ? 0.35 : 1))
-                    .frame(width: diameter, height: diameter)
-                Image(systemName: state.symbolName)
-                    .font(.system(size: diameter * 0.32, weight: .semibold))
-                    .foregroundStyle(theme.onAccent)
-                    .symbolEffect(.pulse, isActive: state == .thinking && !reduceMotion)
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .frame(width: diameter * 1.8, height: diameter * 1.8)
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Circle())
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: amplitude)
+            Image(systemName: state.symbolName)
+                .font(.system(size: diameter * 0.32, weight: .semibold))
+                .foregroundStyle(theme.onAccent)
+                .symbolEffect(.pulse, isActive: state == .thinking && !reduceMotion)
+                .symbolEffect(.variableColor.iterative, isActive: amplitude > 0.15)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: diameter * 0.6, height: diameter * 0.6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .tint(theme.accent.opacity(state == .unavailable ? 0.35 : 1))
+        .frame(minWidth: 44, minHeight: 44)
         .disabled(!state.isInteractive)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Assistant vocal")

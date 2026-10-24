@@ -218,6 +218,20 @@ public enum ConversationHistory {
         }
     }
 
+    /// Date courte à droite d'une ligne d'historique, comme Mail : l'heure aujourd'hui, « Hier », le jour de la semaine
+    /// dans les 7 jours, sinon la date.
+    public static func shortDate(_ date: Date, now: Date, calendar: Calendar = .current,
+                                 locale: Locale = Locale(identifier: "fr_FR")) -> String {
+        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        switch section(for: date, now: now, calendar: calendar) {
+        case .today: style = style.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)
+        case .yesterday: return "Hier"
+        case .lastWeek: style = style.weekday(.abbreviated)
+        case .lastMonth, .older: style = style.day(.defaultDigits).month(.abbreviated)
+        }
+        return date.formatted(style)
+    }
+
     public struct Group: Identifiable, Sendable, Equatable {
         public let section: Section
         public let items: [StoredConversation]
