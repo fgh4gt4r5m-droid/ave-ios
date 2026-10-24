@@ -188,3 +188,22 @@ une maquette HTML ne montre qu'une intention.
   de confidentialité le dit : conditions passées en `2026-10-v2`, l'accord est redemandé.
 - **Pas fait** : les sources (D8) attendent le moteur de recherche. Non vérifié : tout l'aspect à l'écran, la fluidité de la
   lumière, et la dictée pendant qu'une session audio est ouverte (deux moteurs audio) sur un vrai iPhone.
+
+## Fluidité (maquette « Fluidité d'AVE », validée le 2026-10-24)
+Retour du propriétaire sur iPhone : l'app doit avoir la même sensation que ChatGPT, Claude ou Gemini, et rien ne doit
+trahir une construction automatique. Code : `ChatView` (défilement), `RichText` + `StreamReveal` (écriture),
+`MediaViews` (image), `AVEApp.record` (historique). Tests : `AssistantFeaturesTests`, `MediaTests`.
+1. **Écriture** : la réponse se dévoile à cadence régulière (un fragment de 120 caractères en 0,5 s) au lieu d'apparaître
+   par fragments ; d'un coup avec « Réduire les animations ». Le moteur envoie un fragment toutes les 100 ms (PR #40 :
+   40 ms, en attente du oui du propriétaire dans la session moteur).
+2. **Historique** : enregistré quand le fil se pose (réponse finie, ou 1,5 s sans changement), hors du fil principal,
+   dans l'ordre. Avant : chaque fragment réécrivait toute la conversation et reconstruisait l'écran (saccades).
+3. **Défilement** : à l'envoi, la question monte en haut ; le dernier échange occupe au moins la hauteur visible ; rien
+   ne ramène de force en bas pendant l'écriture ; « ↓ » (bouton en verre) revient à la fin.
+4. **Image** : du flou au net en 0,6 s, une seule fois, pour une image produite dans la session ; vignettes décodées
+   hors du fil principal ; un toucher l'ouvre en plein écran (aperçu du système) ; appui long : Enregistrer dans
+   Photos, Copier, Partager, puis Refaire et Signaler (rouge). Les photos jointes s'ouvrent aussi en plein écran.
+5. **Vibrations** (réglage « Vibrations ») : envoi (légère), résultat prêt (« réussite »), copier (légère), tâche
+   échouée (« avertissement ») ; aucune pendant l'écriture. Le coordinateur compte les événements, la vue vibre.
+6. **Textes** : plus de « je » dans les messages d'erreur, plus de mots internes (« moteur », « l'IA ») ; le bouton
+   d'envoi est un bouton Liquid Glass du système.

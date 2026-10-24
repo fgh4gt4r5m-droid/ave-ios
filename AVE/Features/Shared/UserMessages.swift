@@ -6,7 +6,7 @@ public enum UserMessages {
     public static func turnError(code: String, retryAfterSeconds: Int? = nil) -> String {
         switch code {
         case "language_unavailable":
-            return "Cette langue n'a pas encore de moteur vocal. Choisissez le français pour parler avec l'assistant."
+            return "Cette langue n'est pas encore disponible à la voix. Choisissez le français pour parler avec l'assistant."
         case "unsupported_language":
             return "Cette langue n'est pas prise en charge."
         case "language_not_allowed":
@@ -103,7 +103,7 @@ public enum UserMessages {
         case "content_refused": return "Je ne peux pas créer cette image. Essayez une autre demande."
         case "rights_not_confirmed": return "Cochez la case d'accord pour retoucher cette photo."
         case "moderation_unavailable":
-            return "Je ne peux pas vérifier cette image pour l'instant, donc je ne la crée pas. Réessayez dans un moment."
+            return "Impossible de vérifier cette image pour l'instant : elle n'a pas été créée. Réessayez dans un moment."
         case "quota_exceeded":
             guard let seconds = retryAfterSeconds, seconds >= 1 else { return "Vous avez atteint la limite pour aujourd'hui." }
             return "Vous avez atteint la limite pour aujourd'hui. Réessayez dans \(duration(seconds))."
@@ -113,7 +113,7 @@ public enum UserMessages {
         case "feature_disabled": return "Cette fonction n'est pas encore disponible."
         case "cancelled": return "Création annulée."
         case "low_quality":
-            return "Le résultat n'était pas réussi, je ne vous l'ai pas montré. Réessayez, peut-être avec une autre description."
+            return "Le résultat n'était pas réussi : il n'a pas été affiché. Réessayez, peut-être avec une autre description."
         case "file_not_found": return "Le fichier a expiré (il est gardé 1 h). Joignez-le de nouveau."
         case "bad_request": return "La demande n'a pas pu être traitée. Réessayez."
         case "unauthorized": return "Connexion refusée. Reconnectez-vous ou vérifiez votre accès."
@@ -139,15 +139,15 @@ public enum UserMessages {
     }
 
     /// Mention obligatoire tant que le moteur est factice (`simulated: true`).
-    public static let simulatedImage = "Le moteur d'images n'est pas encore branché : ceci n'est pas une vraie image."
+    public static let simulatedImage = "Image de démonstration : la création d'images n'est pas encore active."
     public static let simulatedDocument = "Document de démonstration : le texte est renvoyé tel quel, sans traitement réel."
     public static let simulatedBadge = "Image de démonstration"
     public static let mediaUnavailable = "Les fichiers et les images ne sont pas disponibles dans cette version."
     /// Case d'accord des CGU (`CGU-CONTENUS-IA.md` §2) : retoucher la photo d'une personne réelle exige son accord.
     public static let rightsConfirmation = "Je confirme être sur cette photo, ou avoir l'accord des personnes présentes."
-    public static let fileForgotten = "La photo est oubliée par le serveur au bout d'1 h."
+    public static let fileForgotten = "La photo est effacée des serveurs d'AVE au bout d'une heure."
     public static let cropIsLocal =
-        "Recadrer se fait sur l'iPhone, tout de suite, sans rien envoyer. Prolonger (l'IA invente les bords), agrandir et modifier passent par le moteur."
+        "Recadrer se fait sur l'iPhone, sans rien envoyer. Prolonger (qui invente les bords), agrandir et modifier demandent une connexion."
 
     // Signalement (E17). Ne JAMAIS dire « envoyé » si le moteur ne l'a pas gardé.
     public static let reportHidden = "L'image est masquée tout de suite sur cet iPhone."
@@ -155,7 +155,7 @@ public enum UserMessages {
     public static let reportDisabled =
         "Le signalement n'a pas pu être enregistré pour l'instant. L'image reste masquée sur cet iPhone."
     public static let reportFailed =
-        "Le signalement n'a pas été envoyé (pas de connexion ?). L'image reste masquée sur cet iPhone."
+        "Le signalement n'a pas été envoyé : vérifiez la connexion. L'image reste masquée sur cet iPhone."
 
     public static func reportReason(_ reason: ReportReason) -> String {
         switch reason {

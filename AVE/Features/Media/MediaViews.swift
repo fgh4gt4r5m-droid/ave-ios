@@ -95,6 +95,8 @@ struct MediaMessageView: View {
                                 canRedo: coordinator.canRedo(messageID: message.id),
                                 onRedo: { Task { await coordinator.redo(messageID: message.id) } },
                                 onReport: { onSheet(.report(messageID: message.id)) },
+                                reveals: coordinator.freshMedia.contains(message.id),
+                                onRevealed: { coordinator.markRevealed(messageID: message.id) },
                                 moreMenu: { actionsMenu(media) })
             } else {
                 DocumentResultView(media: media, url: coordinator.mediaURL(media))
@@ -444,6 +446,9 @@ struct ImageResultView<More: View>: View {
     let canRedo: Bool
     let onRedo: () -> Void
     let onReport: () -> Void
+    /// Tout juste produite dans cette session : elle passe du flou au net.
+    var reveals = false
+    var onRevealed: () -> Void = {}
     @ViewBuilder let moreMenu: () -> More
     @State private var savedMessage: String?
     /// Aperçu plein écran du système (pincer pour zoomer, partager), comme une photo dans Messages.
@@ -461,7 +466,7 @@ struct ImageResultView<More: View>: View {
                     .background(theme.assistantBubble, in: .rect(cornerRadius: theme.cornerRadius))
             } else {
                 Button { preview = url } label: {
-                    MediaThumbnail(url: url, maxPixelSize: 1200)
+                    MediaThumbnail(url: url, maxPixelSize: 1200, reveals: reveals, onRevealed: onRevealed)
                         .frame(maxWidth: 320)
                         .clipShape(.rect(cornerRadius: theme.cornerRadius))
                         .overlay(alignment: .topLeading) { badges }
@@ -469,6 +474,8 @@ struct ImageResultView<More: View>: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(url == nil)
+                // Appui long : l'image soulevée et le menu du système, comme une photo dans Messages (maquette validée).
+                .contextMenu { imageMenu }
                 .accessibilityLabel(media.simulated ? UserMessages.simulatedBadge : "Image créée par AVE")
                 .accessibilityHint("Ouvre l'image en plein écran.")
                 if media.simulated { InfoLine(text: UserMessages.simulatedImage) }
@@ -480,6 +487,22 @@ struct ImageResultView<More: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .quickLookPreview($preview)
+    }
+
+    @ViewBuilder private var imageMenu: some View {
+        if let url {
+            Section {
+                Button("Enregistrer dans Photos", systemImage: "square.and.arrow.down") { Task { await saveToPhotos() } }
+                Button("Copier", systemImage: "doc.on.doc") {
+                    if let image = UIImage(contentsOfFile: url.path) { UIPasteboard.general.image = image }
+                }
+                ShareLink(item: url) { Label("Partager…", systemImage: "square.and.arrow.up") }
+            }
+        }
+        Section {
+            if canRedo { Button("Refaire", systemImage: "arrow.clockwise", action: onRedo) }
+            Button("Signaler…", systemImage: "flag", role: .destructive, action: onReport)
+        }
     }
 
     /// « Image de démonstration » tant que le moteur est factice. Plus d'étiquette « Générée par IA » sur l'image
@@ -593,12 +616,35 @@ struct DocumentResultView: View {
 struct MediaThumbnail: View {
     let url: URL?
     let maxPixelSize: Int
+    /// Image tout juste produite : elle passe du flou au net en 0,6 s (maquette « Fluidité d'AVE », validée le
+    /// 2026-10-24) ; directement avec « Réduire les animations ».
+    let reveals: Bool
+    let onRevealed: () -> Void
     @State private var image: CGImage?
+    @State private var sharp: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(url: URL?, maxPixelSize: Int, reveals: Bool = false, onRevealed: @escaping () -> Void = {}) {
+        self.url = url
+        self.maxPixelSize = maxPixelSize
+        self.reveals = reveals
+        self.onRevealed = onRevealed
+        _sharp = State(initialValue: !reveals)
+    }
 
     var body: some View {
         ZStack {
             if let image {
                 Image(decorative: image, scale: 1).resizable().scaledToFit()
+                    .blur(radius: sharp ? 0 : 18)
+                    .saturation(sharp ? 1 : 0.6)
+                    .opacity(sharp ? 1 : 0.35)
+                    .scaleEffect(sharp ? 1 : 1.03)
+                    .onAppear {
+                        guard !sharp else { return }
+                        withAnimation(.smooth(duration: 0.6)) { sharp = true }
+                        onRevealed()
+                    }
             } else {
                 Rectangle().fill(.quaternary).aspectRatio(1, contentMode: .fit)
                     .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
@@ -606,9 +652,23 @@ struct MediaThumbnail: View {
         }
         .task(id: url) {
             guard let url else { return }
-            image = ImageProcessing.previewImage(at: url, maxPixelSize: maxPixelSize)
+            // Décodage hors du fil principal : l'arrivée d'une image ne fait plus d'à-coup dans le défilement.
+            let size = maxPixelSize
+            let decoded = await Task.detached(priority: .userInitiated) {
+                DecodedImage(image: ImageProcessing.previewImage(at: url, maxPixelSize: size))
+            }.value
+            if reduceMotion, !sharp {
+                sharp = true
+                onRevealed()
+            }
+            image = decoded.image
         }
     }
+}
+
+/// Un `CGImage` est immuable : le passer d'une tâche à l'autre est sûr.
+private struct DecodedImage: @unchecked Sendable {
+    let image: CGImage?
 }
 
 struct DocumentIcon: View {

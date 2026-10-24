@@ -209,3 +209,19 @@ struct StreamRevealTests {
         #expect(frames >= 5)  // et pas d'un coup : c'est ce qui rend l'écriture fluide
     }
 }
+
+@Suite("Assistant : défilement après l'envoi")
+struct LastTurnTests {
+    @Test("le dernier échange commence à la dernière question de la personne")
+    func lastTurn() {
+        var t = ChatTranscript()
+        #expect(t.lastTurnStart == 0)
+        t.appendUserRequest("Comment économiser ?")
+        t.apply(.replyText(utteranceID: 1, text: "Trois idées.", lang: "fra"))
+        t.apply(.turnEnd(utteranceID: 1, interrupted: false))
+        t.appendUserRequest("Et l'électricité ?")
+        #expect(t.lastTurnStart == t.messages.count - 1)
+        t.apply(.replyText(utteranceID: 2, text: "Éteignez…", lang: "fra"))
+        #expect(t.lastTurnStart == t.messages.count - 2)
+    }
+}

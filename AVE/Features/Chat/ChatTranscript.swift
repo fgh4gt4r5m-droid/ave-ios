@@ -178,6 +178,12 @@ public struct ChatTranscript: Sendable, Equatable {
         messages[i].media = media
     }
 
+    /// Début du dernier échange : le dernier message de la personne (question ou pièce jointe) ; `messages.count` s'il
+    /// n'y en a pas. L'écran lui donne au moins la hauteur visible, pour que la réponse s'écrive sous la question.
+    public var lastTurnStart: Int {
+        messages.lastIndex { $0.role == .user } ?? messages.count
+    }
+
     public func messageID(forTaskRef ref: String) -> Int? {
         messages.first { $0.task?.ref == ref }?.id
     }

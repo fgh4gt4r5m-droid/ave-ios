@@ -46,6 +46,9 @@ public struct ChatView: View {
     /// Mode image de la barre (`nil` : barre normale). Il reste après l'envoi, pour enchaîner une autre image.
     @State private var imageMode: ImageOptions?
     @State private var imagesSent = 0
+    /// Hauteur visible du fil (sans les barres) et « ↓ » quand la fin est hors de vue.
+    @State private var visibleHeight: CGFloat = 0
+    @State private var showsJumpToEnd = false
     @FocusState private var composerFocused: Bool
     @Environment(\.aveTheme) private var theme
 
@@ -121,7 +124,11 @@ public struct ChatView: View {
         .onChange(of: coordinator.transcript.messages) { _, messages in
             onTranscriptChange?(messages)
         }
+        // Vibrations (maquette validée le 2026-10-24) : aux moments qui comptent, jamais pendant l'écriture.
         .sensoryFeedback(.impact(weight: .light), trigger: sentCount) { _, _ in haptics }
+        .sensoryFeedback(.success, trigger: coordinator.tasksCompleted) { _, _ in haptics }
+        .sensoryFeedback(.warning, trigger: coordinator.tasksFailed) { _, _ in haptics }
+        .environment(\.aveHaptics, haptics)
         // `start()` est sans effet si la session tourne déjà. Pas d'arrêt dans `onDisappear` : iOS l'appelle aussi
         // quand le mode vocal plein écran recouvre cette vue, ce qui couperait la session. C'est le propriétaire du
         // coordinateur (l'app, ou l'app hôte) qui appelle `stop()` (déconnexion, nouvelle conversation).
@@ -172,53 +179,97 @@ public struct ChatView: View {
         coordinator.transcript.messages.isEmpty && coordinator.pendingTexts.isEmpty && coordinator.attachmentDrafts.isEmpty
     }
 
+    /// Défilement (maquette « Fluidité d'AVE », validée le 2026-10-24), comme ChatGPT et Claude : à l'envoi, la question
+    /// monte en haut de l'écran et le dernier échange occupe au moins la hauteur visible, pour que la réponse s'écrive
+    /// dessous sans que le fil saute. Rien ne ramène de force en bas pendant l'écriture ; « ↓ » revient à la fin.
     private var messages: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     statusLine
+                    let list = coordinator.transcript.messages
                     let captions = imageCaptions
-                    ForEach(coordinator.transcript.messages) { message in
-                        if message.media != nil || message.task != nil {
-                            MediaMessageView(message: message, coordinator: coordinator,
-                                             showsActions: message.id == coordinator.transcript.messages.last?.id,
-                                             onSheet: { mediaSheet = $0 })
-                            .id(message.id)
-                        } else if let caption = captions[message.id] {
-                            // La description d'une image, puis « Image · Paysage · 1080p » (maquette, écran 3).
-                            VStack(alignment: .trailing, spacing: 6) {
-                                bubble(for: message)
-                                Label(caption, systemImage: "photo")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.trailing, 6)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .id(message.id)
-                        } else {
-                            bubble(for: message).id(message.id)
+                    let split = coordinator.transcript.lastTurnStart
+                    ForEach(list[..<split]) { message in
+                        row(message, captions: captions)
+                    }
+                    VStack(alignment: .leading, spacing: 24) {
+                        ForEach(list[split...]) { message in
+                            row(message, captions: captions)
+                        }
+                        ForEach(coordinator.pendingTexts) { pending in
+                            PendingBubble(text: pending.text)
+                        }
+                        if showsThinking {
+                            ThinkingRow().transition(.opacity)
                         }
                     }
-                    ForEach(coordinator.pendingTexts) { pending in
-                        PendingBubble(text: pending.text)
-                    }
-                    if showsThinking {
-                        ThinkingRow().transition(.opacity)
-                    }
+                    .frame(minHeight: split < list.count ? max(0, visibleHeight - 24) : nil, alignment: .top)
+                    Color.clear.frame(height: 1).id(Self.endID)
                 }
                 .animation(.easeInOut(duration: 0.2), value: showsThinking)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
             .overlay { if isEmpty { emptyState } }
-            .scrollDismissesKeyboard(.interactively)
-            .defaultScrollAnchor(.bottom)
-            .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
-            .onChange(of: coordinator.transcript.messages.count) { _, _ in
-                if let last = coordinator.transcript.messages.last?.id {
-                    withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+            .overlay(alignment: .bottom) {
+                if showsJumpToEnd {
+                    Button("Aller à la fin", systemImage: "arrow.down") {
+                        withAnimation(.smooth) { proxy.scrollTo(Self.endID, anchor: .bottom) }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .padding(.bottom, 8)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
             }
+            .animation(.snappy, value: showsJumpToEnd)
+            .scrollDismissesKeyboard(.interactively)
+            // Ouverture d'une conversation : la fin. Ensuite, aucun ancrage automatique en bas (la réponse ne tire pas
+            // le fil pendant qu'on lit).
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
+                ScrollMetrics(geometry)
+            } action: { _, metrics in
+                visibleHeight = metrics.visibleHeight
+                showsJumpToEnd = metrics.distanceToEnd > 120
+            }
+            .background((theme.background ?? Color(.systemBackground)).ignoresSafeArea())
+            .onChange(of: coordinator.transcript.messages.last?.id) { _, newID in
+                guard let newID, coordinator.transcript.messages.last?.role == .user else { return }
+                withAnimation(.smooth(duration: 0.45)) { proxy.scrollTo(newID, anchor: .top) }
+            }
+            .onChange(of: coordinator.pendingTexts.count) { old, new in
+                if new > old { withAnimation(.smooth) { proxy.scrollTo(Self.endID, anchor: .bottom) } }
+            }
+            // Autre conversation (nouvelle, ou rouverte depuis l'historique) : on repart de sa fin.
+            .onChange(of: ObjectIdentifier(coordinator)) { _, _ in proxy.scrollTo(Self.endID, anchor: .bottom) }
+        }
+    }
+
+    private static let endID = "fin-du-fil"
+
+    @ViewBuilder private func row(_ message: ChatMessage, captions: [Int: String]) -> some View {
+        if message.media != nil || message.task != nil {
+            MediaMessageView(message: message, coordinator: coordinator,
+                             showsActions: message.id == coordinator.transcript.messages.last?.id,
+                             onSheet: { mediaSheet = $0 })
+            .id(message.id)
+        } else if let caption = captions[message.id] {
+            // La description d'une image, puis « Image · Paysage · 1080p » (maquette, écran 3).
+            VStack(alignment: .trailing, spacing: 6) {
+                bubble(for: message)
+                Label(caption, systemImage: "photo")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 6)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .id(message.id)
+        } else {
+            bubble(for: message).id(message.id)
         }
     }
 
@@ -539,7 +590,8 @@ public struct ChatView: View {
     }
 
     /// Un seul bouton rond, dans la barre : « envoyer » (bleu AVE) dès qu'on écrit, « arrêter » pendant une réponse,
-    /// sinon « mode vocal ». Envoyer est le seul aplat de couleur de l'écran.
+    /// sinon « mode vocal ». Bouton Liquid Glass du système (exigence du propriétaire : aucun bouton dessiné à la main) ;
+    /// envoyer est le seul aplat de couleur de l'écran.
     private var actionButton: some View {
         let stops = !canSend && coordinator.isResponding
         return Button {
@@ -548,13 +600,13 @@ public struct ChatView: View {
             Image(systemName: canSend ? "arrow.up" : stops ? "stop.fill" : "waveform")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(canSend ? theme.onAccent : Color(.systemBackground))
-                .frame(width: 36, height: 36)
-                .background(canSend ? theme.accent : Color.primary, in: .circle)
-                .frame(width: 44, height: 44)
-                .contentShape(.circle)
+                .frame(width: 22, height: 22)
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .tint(canSend ? theme.accent : Color.primary)
+        .frame(minWidth: 44, minHeight: 44)
         .accessibilityLabel(canSend ? "Envoyer" : stops ? "Arrêter la réponse" : "Mode vocal")
         .accessibilityHint(canSend || stops ? "" : "Parler avec l'assistant.")
     }
@@ -692,6 +744,18 @@ public struct ChatView: View {
     private var voiceModeBinding: Binding<Bool> {
         Binding(get: { coordinator.mode == .voice },
                 set: { if !$0 { Task { await coordinator.setMode(.text) } } })
+    }
+}
+
+/// Mesures du défilement, en points.
+struct ScrollMetrics: Equatable {
+    var visibleHeight: CGFloat
+    var distanceToEnd: CGFloat
+
+    init(_ geometry: ScrollGeometry) {
+        visibleHeight = geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom
+        let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height - geometry.contentInsets.bottom
+        distanceToEnd = geometry.contentSize.height - visibleBottom
     }
 }
 

@@ -63,6 +63,9 @@ private struct AVEThemeKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
+    /// Vibrations autorisées (réglage « Vibrations » de l'app, ou choix de l'app hôte).
+    @Entry public var aveHaptics: Bool = true
+
     public var aveTheme: AVETheme {
         get { self[AVEThemeKey.self] }
         set { self[AVEThemeKey.self] = newValue }

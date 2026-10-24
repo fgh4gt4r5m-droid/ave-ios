@@ -24,6 +24,7 @@ struct MessageBubble: View {
     var showsMark = false
 
     @Environment(\.aveTheme) private var theme
+    @Environment(\.aveHaptics) private var haptics
     @State private var copied = false
 
     var body: some View {
@@ -128,6 +129,7 @@ struct MessageBubble: View {
             }
         }
         .padding(.leading, -12)  // aligne l'icône (et non sa zone tactile) sur le texte
+        .sensoryFeedback(.impact(weight: .light), trigger: copied) { _, new in new && haptics }
     }
 
     @ViewBuilder private var userMenu: some View {

@@ -232,7 +232,7 @@ struct SessionCoordinatorTests {
         await h.speakOneUtterance()
         t.serverSend(#"{"type":"turn_error","seq":1,"code":"language_unavailable","message":"m","lang":"sus"}"#)
         #expect(await eventually { await h.coordinator.phase == .idle })
-        #expect(h.coordinator.transcript.messages.last?.text.contains("moteur vocal") == true)
+        #expect(h.coordinator.transcript.messages.last?.text.contains("disponible à la voix") == true)
         await h.coordinator.stop()
     }
 

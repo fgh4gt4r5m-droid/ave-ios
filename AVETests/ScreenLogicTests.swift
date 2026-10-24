@@ -87,7 +87,7 @@ struct ChatTranscriptTests {
     func turnError() {
         var t = ChatTranscript()
         t.apply(.turnError(code: "language_unavailable", message: "", lang: "sus", retryAfterSeconds: nil))
-        #expect(t.messages.last?.role == .system && t.messages.last?.text.contains("moteur vocal") == true)
+        #expect(t.messages.last?.role == .system && t.messages.last?.text.contains("disponible à la voix") == true)
         t.apply(.turnError(code: "rate_limited", message: "", lang: nil, retryAfterSeconds: nil))
         #expect(t.messages.last?.text.contains("trop de messages") == true)
         t.apply(.turnError(code: "rate_limited", message: "", lang: nil, retryAfterSeconds: 3))

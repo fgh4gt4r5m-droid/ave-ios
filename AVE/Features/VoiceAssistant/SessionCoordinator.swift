@@ -85,6 +85,11 @@ public final class SessionCoordinator {
     public var demoNotice: String? { UserMessages.demoNotice(engine: engine, fallback: configuration.demoNotice) }
     /// Ce qui est réel dans la session en cours (`ready.engine`), `nil` avant le premier `ready` ou avec un moteur ancien.
     public private(set) var engine: EngineStatus?
+    /// Résultats d'images ou de documents arrivés, et tâches échouées : la vue vibre à chaque hausse.
+    public internal(set) var tasksCompleted = 0
+    public internal(set) var tasksFailed = 0
+    /// Images produites dans cette session, pas encore montrées : elles passent du flou au net une seule fois.
+    public internal(set) var freshMedia: Set<Int> = []
 
     /// Appelé APRÈS accord explicite de l'utilisateur (ou si le serveur dit `confirm: false`).
     @ObservationIgnored public var onAction: (@MainActor (ActionCard) -> Void)?

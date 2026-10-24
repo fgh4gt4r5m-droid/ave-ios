@@ -424,6 +424,9 @@ struct MediaSessionTests {
         #expect(result.title == "contrat-bail (anglais).txt" && result.simulated && result.origin == .generated)
         #expect(c.mediaURL(result).flatMap { try? Data(contentsOf: $0) } == Data("hello".utf8))
         #expect(c.transcript.messages.last?.task == nil)
+        // Vibration « réussite » une fois ; un document ne passe pas du flou au net.
+        #expect(c.tasksCompleted == 1 && c.tasksFailed == 0)
+        #expect(c.freshMedia.isEmpty)
     }
 
     @Test("retouche d'une photo jointe : rien ne part sans la case d'accord")

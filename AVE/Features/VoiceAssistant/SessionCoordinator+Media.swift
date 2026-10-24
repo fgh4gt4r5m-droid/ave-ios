@@ -235,6 +235,10 @@ extension SessionCoordinator {
             Task { await client.cancelTask(taskID: started.taskID) }
             return
         }
+        if case .taskError(let failure) = event, failure.code != "cancelled",
+           let id = transcript.messageID(forTaskRef: failure.ref), transcript.message(id)?.task?.isFinished == false {
+            tasksFailed += 1
+        }
         guard let done = transcript.applyTask(event) else { return }
         download(done.result, messageID: done.messageID)
     }
@@ -432,6 +436,7 @@ extension SessionCoordinator {
         let title = isImage ? MediaTaskText.imageResultTitle(mime: result.mime) : card.resultTitle
         guard let data, let name = media.store.save(data, fileName: title) else {
             transcript.updateTask(messageID: messageID) { $0.state = .failed(code: "download_failed", retryAfterSeconds: nil) }
+            tasksFailed += 1
             return
         }
         let size = isImage ? ImageProcessing.dimensions(of: data) : nil
@@ -440,6 +445,13 @@ extension SessionCoordinator {
                              height: result.height ?? size?.height, fileID: result.fileID, expiresAt: result.expiresAt,
                              simulated: result.simulated, taskID: result.taskID, request: card.request)
         transcript.completeTask(messageID: messageID, with: item)
+        if isImage { freshMedia.insert(messageID) }
+        tasksCompleted += 1
+    }
+
+    /// L'image vient de passer du flou au net : elle ne le refera pas (retour dans le fil, défilement).
+    public func markRevealed(messageID: Int) {
+        freshMedia.remove(messageID)
     }
 
     enum RightsDecision: Equatable {
