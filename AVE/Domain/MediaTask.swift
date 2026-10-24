@@ -64,6 +64,22 @@ public struct MediaTaskStarted: Sendable, Equatable {
     public let ref: String
     public let kind: MediaTaskKind?
     public let estimatedSeconds: Int?
+    /// D12 (moteur PR #38) : image lancée par le moteur depuis la conversation (`ref` « chat:<utterance_id> »).
+    /// `prompt` est la description rédigée par le modèle, à montrer ; format et qualité choisis par lui.
+    public let prompt: String?
+    public let size: ImageSize?
+    public let quality: ImageQuality?
+
+    public init(taskID: String, ref: String, kind: MediaTaskKind?, estimatedSeconds: Int?, prompt: String? = nil,
+                size: ImageSize? = nil, quality: ImageQuality? = nil) {
+        self.taskID = taskID
+        self.ref = ref
+        self.kind = kind
+        self.estimatedSeconds = estimatedSeconds
+        self.prompt = prompt
+        self.size = size
+        self.quality = quality
+    }
 }
 
 /// `task_done` : le fichier produit est à télécharger AUSSITÔT (`url`, même jeton) ; le moteur l'oublie au bout d'1 h.

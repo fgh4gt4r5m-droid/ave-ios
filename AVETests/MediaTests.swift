@@ -555,4 +555,39 @@ struct ImageInConversationTests {
             #expect(!ImageIntent.suggestsImage(text), "\(text)")
         }
     }
+    /// Vecteurs « D12, … » du contrat (moteur `main` @ `fc40050`, PR #38).
+    @Test("D12 : ready.engine.image_from_chat et task_started avec la description du modèle")
+    func d12Decoding() throws {
+        let ready = try ServerFrame.decode(#"{"type":"ready","session_id":"s","resumed":false,"last_mic_seq":0,"seq":0,"protocol":1,"engine":{"dialogue":"real","voice":"real","images":"real","documents":"real","image_tasks":["image_generate","image_edit","image_upscale","image_extend"],"image_from_chat":true}}"#)
+        guard case .ready(let r) = ready.event else { Issue.record("pas ready"); return }
+        #expect(r.engine?.createsImagesFromChat == true)
+        let withoutGenerate = EngineStatus(dialogue: .real, voice: .real, images: .real, documents: .real,
+                                           imageTasks: [.upscale], imageFromChat: true)
+        #expect(!withoutGenerate.createsImagesFromChat)
+
+        let started = try ServerFrame.decode(#"{"type":"task_started","seq":41,"task_id":"t_77","ref":"chat:5","kind":"image_generate","estimated_s":35,"prompt":"Un marché coloré au lever du soleil, étals de fruits, lumière dorée, photo réaliste","size":"square","quality":"1080p"}"#)
+        #expect(started.event == .taskStarted(MediaTaskStarted(
+            taskID: "t_77", ref: "chat:5", kind: .imageGenerate, estimatedSeconds: 35,
+            prompt: "Un marché coloré au lever du soleil, étals de fruits, lumière dorée, photo réaliste",
+            size: .square, quality: .hd)))
+    }
+
+    @Test("D12 : la tâche lancée par le moteur devient une carte ; un rejeu ne la double pas ; un ref inconnu est ignoré")
+    func d12Card() {
+        var t = ChatTranscript()
+        let now = Date(timeIntervalSince1970: 1000)
+        let started = MediaTaskStarted(taskID: "t_77", ref: "chat:5", kind: .imageGenerate, estimatedSeconds: 35,
+                                       prompt: "Un marché coloré", size: .landscape, quality: .hd)
+        t.applyTask(.taskStarted(started), now: now)
+        #expect(t.messages.count == 1)
+        let card = t.messages.last?.task
+        #expect(card?.isFromChat == true && card?.taskID == "t_77")
+        #expect(card?.state == .working(startedAt: now, estimatedSeconds: 35))
+        #expect(card?.request == .imageGenerate(prompt: "Un marché coloré", size: .landscape, quality: .hd, ref: "chat:5"))
+        t.applyTask(.taskStarted(started), now: now)  // rejeu à la reprise de session
+        #expect(t.messages.count == 1)
+        t.applyTask(.taskStarted(MediaTaskStarted(taskID: "t_9", ref: "r_perdu", kind: .imageGenerate, estimatedSeconds: 30)))
+        t.applyTask(.taskStarted(MediaTaskStarted(taskID: "t_10", ref: "chat:6", kind: .documentTransform, estimatedSeconds: 5)))
+        #expect(t.messages.count == 1)
+    }
 }

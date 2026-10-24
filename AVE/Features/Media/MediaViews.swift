@@ -356,6 +356,10 @@ struct TaskCardView: View {
                 }
             }
             progress
+            // D12 : ce que le modèle a décidé de dessiner (2 à 4 phrases), replié par défaut.
+            if card.isFromChat, case .imageGenerate(let prompt, _, _, _) = card.request, !prompt.isEmpty {
+                PromptPreview(text: prompt)
+            }
             if card.canCancel {
                 Button("Annuler", action: onCancel)
                     .buttonStyle(.bordered)
@@ -403,6 +407,26 @@ struct TaskCardView: View {
     static func isRetryable(_ code: String) -> Bool {
         !["content_refused", "rights_not_confirmed", "feature_disabled", "unsupported_type", "file_too_large",
           "no_text", "language_unavailable"].contains(code)
+    }
+}
+
+/// La description rédigée par le modèle (D12), sur deux lignes ; un toucher la montre en entier.
+struct PromptPreview: View {
+    let text: String
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(expanded ? nil : 2)
+            Button(expanded ? "Réduire" : "Voir la description") { withAnimation(.snappy) { expanded.toggle() } }
+                .font(.footnote.weight(.semibold))
+                .buttonStyle(.borderless)
+                .frame(minHeight: 44)
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

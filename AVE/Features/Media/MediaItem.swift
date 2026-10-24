@@ -118,6 +118,11 @@ public struct MediaTaskCard: Sendable, Equatable {
 
     public var kind: MediaTaskKind { request.kind }
 
+    /// D12 : préfixe du `ref` d'une image lancée par le moteur depuis la conversation.
+    public static let chatRefPrefix = "chat:"
+    /// Lancée par le moteur (D12) : la carte montre la description qu'il a rédigée.
+    public var isFromChat: Bool { ref.hasPrefix(Self.chatRefPrefix) }
+
     /// Annulation possible tant que le moteur n'a pas rendu son résultat.
     public var canCancel: Bool {
         switch state {

@@ -78,14 +78,21 @@ public struct EngineStatus: Sendable, Equatable {
     public let documents: Media?
     /// `ready.engine.image_tasks` : `nil` = champ absent (moteur antérieur à D11), toutes les tâches sont proposées.
     public let imageTasks: Set<ImageTask>?
+    /// `ready.engine.image_from_chat` (D12) : une demande d'image écrite ou dite dans la conversation lance la création.
+    public let imageFromChat: Bool
 
-    public init(dialogue: Dialogue?, voice: Voice?, images: Media?, documents: Media?, imageTasks: Set<ImageTask>? = nil) {
+    public init(dialogue: Dialogue?, voice: Voice?, images: Media?, documents: Media?, imageTasks: Set<ImageTask>? = nil,
+                imageFromChat: Bool = false) {
         self.dialogue = dialogue
         self.voice = voice
         self.images = images
         self.documents = documents
         self.imageTasks = imageTasks
+        self.imageFromChat = imageFromChat
     }
+
+    /// Le moteur comprend seul « fais-moi une image de… » : l'app ne propose plus « Créer comme image ».
+    public var createsImagesFromChat: Bool { imageFromChat && offers(.generate) }
 
     /// Le moteur propose-t-il cette tâche dans la session ? L'exploitant en coupe (`AVE_IMAGES_DISABLED`, par exemple
     /// retouche et prolongement trop lents) sans nouveau build : l'app masque alors le bouton.
@@ -129,7 +136,7 @@ public struct ServerFrame: Sendable, Equatable {
                 }
                 struct RawEngine: Decodable {
                     let dialogue: String?; let voice: String?; let images: String?; let documents: String?
-                    let image_tasks: [String]?
+                    let image_tasks: [String]?; let image_from_chat: Bool?
                 }
 
                 // Les champs ajoutés au fil des versions (grace_s est un FLOTTANT : 30.0, languages) ne
@@ -151,7 +158,8 @@ public struct ServerFrame: Sendable, Equatable {
                                      voice: $0.voice.flatMap(EngineStatus.Voice.init(rawValue:)),
                                      images: $0.images.flatMap(EngineStatus.Media.init(rawValue:)),
                                      documents: $0.documents.flatMap(EngineStatus.Media.init(rawValue:)),
-                                     imageTasks: $0.image_tasks.map { Set($0.compactMap(EngineStatus.ImageTask.init(rawValue:))) })
+                                     imageTasks: $0.image_tasks.map { Set($0.compactMap(EngineStatus.ImageTask.init(rawValue:))) },
+                                     imageFromChat: $0.image_from_chat ?? false)
                     }
                 }
             }
@@ -251,10 +259,15 @@ public struct ServerFrame: Sendable, Equatable {
             struct B: Decodable { let lang: String }
             event = .languageSet(lang: try body(B.self).lang)
         case "task_started":
-            struct B: Decodable { let task_id: String; let ref: String?; let kind: String?; let estimated_s: Double? }
+            struct B: Decodable {
+                let task_id: String; let ref: String?; let kind: String?; let estimated_s: Double?
+                let prompt: String?; let size: String?; let quality: String?
+            }
             let b = try body(B.self)
             event = .taskStarted(MediaTaskStarted(taskID: b.task_id, ref: b.ref ?? "", kind: b.kind.flatMap { MediaTaskKind(rawValue: $0) },
-                                                  estimatedSeconds: b.estimated_s.map { Int($0.rounded()) }))
+                                                  estimatedSeconds: b.estimated_s.map { Int($0.rounded()) },
+                                                  prompt: b.prompt, size: b.size.flatMap(ImageSize.init(rawValue:)),
+                                                  quality: b.quality.flatMap(ImageQuality.init(rawValue:))))
         case "task_done":
             struct B: Decodable {
                 let task_id: String; let ref: String?; let kind: String?; let file_id: String; let file_kind: String?

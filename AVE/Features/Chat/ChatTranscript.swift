@@ -188,6 +188,19 @@ public struct ChatTranscript: Sendable, Equatable {
     public mutating func applyTask(_ event: ServerEvent, now: Date = Date()) -> (messageID: Int, result: MediaTaskResult)? {
         switch event {
         case .taskStarted(let started):
+            if messageID(forTaskRef: started.ref) == nil {
+                // D12 : image lancée par le moteur pendant le tour (« fais-moi une image de… ») : une carte à elle. Un
+                // `task_started` rejoué (reprise de session) ne la double pas, même après son résultat.
+                guard started.ref.hasPrefix(MediaTaskCard.chatRefPrefix), started.kind == .imageGenerate,
+                      !messages.contains(where: { $0.task?.taskID == started.taskID || $0.media?.taskID == started.taskID })
+                else { return nil }
+                appendTask(MediaTaskCard(ref: started.ref,
+                                         request: .imageGenerate(prompt: started.prompt ?? "", size: started.size,
+                                                                 quality: started.quality, ref: started.ref),
+                                         resultTitle: "Image", taskID: started.taskID,
+                                         state: .working(startedAt: now, estimatedSeconds: started.estimatedSeconds)))
+                return nil
+            }
             guard let id = messageID(forTaskRef: started.ref), let task = message(id)?.task, task.canCancel else { return nil }
             updateTask(messageID: id) {
                 $0.taskID = started.taskID

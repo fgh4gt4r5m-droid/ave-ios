@@ -378,7 +378,9 @@ public struct ChatView: View {
 
     /// « Créer comme image » au-dessus de la barre : la phrase commence comme une demande d'image (jamais en mode image).
     private var suggestsImageMode: Bool {
-        imageMode == nil && coordinator.offers(.generate) && ImageIntent.suggestsImage(draft)
+        // D12 : un moteur qui comprend la phrase seul n'a pas besoin de la proposition.
+        imageMode == nil && coordinator.offers(.generate) && !(coordinator.engine?.createsImagesFromChat ?? false)
+            && ImageIntent.suggestsImage(draft)
     }
 
     private var composer: some View {

@@ -98,7 +98,9 @@ Contrat : `docs/PROTOCOL.md` du moteur (« Fichiers, images, documents », « Si
    Paysage · 1080p » dessous, puis la carte. La pastille reste pour enchaîner ; sa croix rend la barre normale. En mode
    normal, une phrase qui COMMENCE comme une demande d'image (« Crée une image… », « Dessine… ») fait apparaître
    « Créer comme image » au-dessus de la barre (`ImageIntent`) : rien n'est créé sans ce toucher. Comprendre la phrase
-   seule viendra du moteur (D12, PR #37, `ready.engine.image_from_chat`).
+   seule vient du moteur (D12, PR #38, `ready.engine.image_from_chat`) : la proposition disparaît alors ; le moteur
+   lance la tâche dans le tour (`task_started`, `ref` « chat:<utterance_id> ») et l'app en fait une carte, avec la
+   description rédigée par le modèle repliée sur deux lignes (« Voir la description »), Annuler, puis l'image.
 2. **Photos** : toujours réencodées en JPEG sur l'iPhone (HEIC refusé par le moteur ; métadonnées EXIF, dont la position,
    retirées), réduites à 4096 px et sous 10 Mo plutôt que refusées. Un PNG léger part tel quel.
 3. **Envoi** dès le choix, avec aperçu et croix dans la barre ; clé d'idempotence = la pièce jointe (pas de doublon en 3G).
