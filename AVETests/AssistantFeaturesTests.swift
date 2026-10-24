@@ -185,3 +185,27 @@ struct GemmaFormatTests {
         ])
     }
 }
+
+@Suite("Assistant : écriture fluide de la réponse")
+struct StreamRevealTests {
+    @Test("rattrape le texte reçu par cinquièmes, au moins trois caractères, sans le dépasser")
+    func cadence() {
+        #expect(StreamReveal.next(shown: 0, total: 60) == 12)
+        #expect(StreamReveal.next(shown: 58, total: 60) == 60)
+        #expect(StreamReveal.next(shown: 59, total: 60) == 60)
+        #expect(StreamReveal.next(shown: 60, total: 60) == 60)
+        #expect(StreamReveal.next(shown: 70, total: 60) == 60)
+    }
+
+    @Test("un fragment de 120 caractères apparaît en moins d'une demi-seconde (15 images à 33 ms)")
+    func catchesUp() {
+        var shown = 0
+        var frames = 0
+        while shown < 120 {
+            shown = StreamReveal.next(shown: shown, total: 120)
+            frames += 1
+        }
+        #expect(frames <= 15)
+        #expect(frames >= 5)  // et pas d'un coup : c'est ce qui rend l'écriture fluide
+    }
+}

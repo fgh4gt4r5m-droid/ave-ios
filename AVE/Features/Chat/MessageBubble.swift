@@ -71,7 +71,7 @@ struct MessageBubble: View {
                 Label("Réponse vocale", systemImage: "waveform")
                     .foregroundStyle(.secondary)
             } else {
-                RichText(text: message.text)
+                StreamingRichText(text: message.text, streaming: message.status == .streaming)
                     .foregroundStyle(theme.assistantBubbleText)
                     .contextMenu { assistantMenu }
             }

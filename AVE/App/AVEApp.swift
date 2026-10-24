@@ -30,6 +30,9 @@ struct RootView: View {
     @State private var mediaStore: (any MediaStore)? = FileMediaStore.standard()
     @State private var conversations: [StoredConversation] = []
     @State private var currentConversationID: UUID?
+    /// Enregistrement différé de l'historique, et chaîne des écritures (dans l'ordre, hors du fil principal).
+    @State private var pendingRecord: Task<Void, Never>?
+    @State private var lastWrite: Task<Void, Never>?
     /// Ce qu'il reste à demander après la connexion ; `nil` : en cours de vérification.
     @State private var entryStep: EntryFlow.Step?
 
@@ -207,21 +210,54 @@ struct RootView: View {
     // MARK: Historique
 
     /// Enregistre le fil dans l'historique (si le réglage le permet) : une conversation par session.
+    /// Une réponse qui s'écrit change le fil à chaque fragment. Avant le 2026-10-24, chaque fragment réencodait toute la
+    /// conversation, l'écrivait sur le disque depuis le fil principal et republiait `conversations`, ce qui reconstruisait
+    /// tout l'écran : texte saccadé. On attend désormais que le fil se pose (réponse finie, ou 1,5 s sans changement).
     private func record(_ messages: [ChatMessage]) {
-        guard keepHistory, let store else { return }
+        guard keepHistory, store != nil else { return }
+        pendingRecord?.cancel()
+        let settling = messages.contains { $0.status == .streaming }
+        pendingRecord = Task {
+            if settling { try? await Task.sleep(for: .seconds(1.5)) }
+            guard !Task.isCancelled else { return }
+            persist(messages)
+        }
+    }
+
+    /// Avant de quitter le fil affiché : l'enregistrement en attente part tout de suite, ou est abandonné quand le fil
+    /// vient d'être effacé (sinon il recréerait la conversation).
+    private func flushRecord(save: Bool = true) {
+        guard let pending = pendingRecord else { return }
+        pending.cancel()
+        pendingRecord = nil
+        if save, keepHistory, let messages = coordinator?.transcript.messages { persist(messages) }
+    }
+
+    private func persist(_ messages: [ChatMessage]) {
+        guard let store else { return }
         let stored = ConversationHistory.stored(from: messages)
         guard !stored.isEmpty else { return }
         let now = Date()
         if let index = conversations.firstIndex(where: { $0.id == currentConversationID }) {
             conversations[index].messages = stored
             conversations[index].updatedAt = now
-            store.save(conversations[index])
+            write(conversations[index], to: store)
         } else {
             let conversation = StoredConversation(title: ConversationHistory.title(for: stored), createdAt: now,
                                                   updatedAt: now, languageCode: language.language.rawValue,
                                                   messages: stored)
             currentConversationID = conversation.id
             conversations.insert(conversation, at: 0)
+            write(conversation, to: store)
+        }
+    }
+
+    /// Encodage JSON et écriture protégée hors du fil principal, une écriture après l'autre (jamais une ancienne version
+    /// par-dessus une plus récente).
+    private func write(_ conversation: StoredConversation, to store: any ConversationStore) {
+        let previous = lastWrite
+        lastWrite = Task.detached(priority: .utility) {
+            await previous?.value
             store.save(conversation)
         }
     }
@@ -235,11 +271,15 @@ struct RootView: View {
     private func delete(_ id: UUID) {
         store?.delete(id: id)
         conversations.removeAll { $0.id == id }
-        if currentConversationID == id { currentConversationID = nil }
+        if currentConversationID == id {
+            flushRecord(save: false)
+            currentConversationID = nil
+        }
         purgeMedia()
     }
 
     private func clearHistory() {
+        flushRecord(save: false)
         store?.deleteAll()
         conversations = []
         currentConversationID = nil
@@ -260,6 +300,7 @@ struct RootView: View {
     /// « Nouvelle conversation » : un client = une session côté moteur ; on arrête l'ancienne et on en crée une neuve.
     private func newConversation(kind: AccountKind) async {
         showHistory = false
+        flushRecord()
         currentConversationID = nil
         await rebuild(kind: kind, transcript: ChatTranscript())
     }
@@ -268,6 +309,7 @@ struct RootView: View {
     private func open(_ conversation: StoredConversation, kind: AccountKind) async {
         showHistory = false
         guard conversation.id != currentConversationID else { return }
+        flushRecord()
         currentConversationID = conversation.id
         // D9 : la nouvelle session reçoit les derniers échanges ; l'avis « sans mémoire » n'apparaît que si le moteur
         // refuse le contexte (`SessionCoordinator`).
@@ -340,6 +382,7 @@ struct RootView: View {
                 case .signedOut:
                     if let coordinator { await coordinator.stop() }
                     coordinator = nil
+                    flushRecord(save: false)
                     currentConversationID = nil
                     // Une autre personne peut se connecter sur cet iPhone : son nom et son accord lui seront demandés.
                     entryStep = nil

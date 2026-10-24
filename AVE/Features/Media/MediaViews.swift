@@ -164,15 +164,20 @@ enum AttachmentAction {
 struct AttachmentBubble: View {
     let media: MediaItem
     let url: URL?
+    @State private var preview: URL?
     @Environment(\.aveTheme) private var theme
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
             HStack(spacing: 10) {
                 if media.kind == .image, url != nil {
-                    MediaThumbnail(url: url, maxPixelSize: 300)
-                        .frame(width: 64, height: 64)
-                        .clipShape(.rect(cornerRadius: 10))
+                    // Un toucher sur la vignette : la photo en plein écran.
+                    Button { preview = url } label: {
+                        MediaThumbnail(url: url, maxPixelSize: 300)
+                            .frame(width: 64, height: 64)
+                            .clipShape(.rect(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     DocumentIcon(title: media.title).frame(width: 44, height: 44)
                 }
@@ -190,6 +195,7 @@ struct AttachmentBubble: View {
         .padding(.leading, 48)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Vous avez joint \(media.title), \(MediaFormat.detail(media))")
+        .quickLookPreview($preview)
     }
 }
 
@@ -440,6 +446,8 @@ struct ImageResultView<More: View>: View {
     let onReport: () -> Void
     @ViewBuilder let moreMenu: () -> More
     @State private var savedMessage: String?
+    /// Aperçu plein écran du système (pincer pour zoomer, partager), comme une photo dans Messages.
+    @State private var preview: URL?
     @Environment(\.aveTheme) private var theme
 
     var body: some View {
@@ -452,11 +460,17 @@ struct ImageResultView<More: View>: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(theme.assistantBubble, in: .rect(cornerRadius: theme.cornerRadius))
             } else {
-                MediaThumbnail(url: url, maxPixelSize: 1200)
-                    .frame(maxWidth: 320)
-                    .clipShape(.rect(cornerRadius: theme.cornerRadius))
-                    .overlay(alignment: .topLeading) { badges }
-                    .accessibilityLabel(media.simulated ? UserMessages.simulatedBadge : "Image créée par AVE")
+                Button { preview = url } label: {
+                    MediaThumbnail(url: url, maxPixelSize: 1200)
+                        .frame(maxWidth: 320)
+                        .clipShape(.rect(cornerRadius: theme.cornerRadius))
+                        .overlay(alignment: .topLeading) { badges }
+                        .contentShape(.rect(cornerRadius: theme.cornerRadius))
+                }
+                .buttonStyle(.plain)
+                .disabled(url == nil)
+                .accessibilityLabel(media.simulated ? UserMessages.simulatedBadge : "Image créée par AVE")
+                .accessibilityHint("Ouvre l'image en plein écran.")
                 if media.simulated { InfoLine(text: UserMessages.simulatedImage) }
                 actions
                 if let savedMessage {
@@ -465,6 +479,7 @@ struct ImageResultView<More: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .quickLookPreview($preview)
     }
 
     /// « Image de démonstration » tant que le moteur est factice. Plus d'étiquette « Générée par IA » sur l'image

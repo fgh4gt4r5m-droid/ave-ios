@@ -1,6 +1,41 @@
 #if os(iOS)
 import SwiftUI
 
+/// Réponse qui s'écrit : le texte reçu se dévoile à cadence régulière (`StreamReveal`) au lieu d'apparaître par
+/// fragments. Une réponse terminée ou relue de l'historique s'affiche d'un coup ; « Réduire les animations » aussi.
+struct StreamingRichText: View {
+    let text: String
+    let streaming: Bool
+    /// Caractères montrés ; `nil` = tout le texte.
+    @State private var shown: Int?
+    /// Dernières valeurs reçues, lues par la boucle (les propriétés `let` y seraient figées à son départ).
+    @State private var total = 0
+    @State private var live = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        RichText(text: visible)
+            .onChange(of: text, initial: true) { _, new in total = new.count }
+            .onChange(of: streaming, initial: true) { _, new in live = new }
+            .task {
+                guard streaming, !reduceMotion else { return }
+                shown = 0
+                while !Task.isCancelled {
+                    let current = shown ?? total
+                    if current >= total, !live { break }
+                    shown = StreamReveal.next(shown: current, total: total)
+                    try? await Task.sleep(for: StreamReveal.frameInterval)
+                }
+                shown = nil
+            }
+    }
+
+    private var visible: String {
+        guard let shown, shown < text.count else { return text }
+        return String(text.prefix(shown))
+    }
+}
+
 /// Réponse mise en forme : chaque bloc (`MarkdownBlocks`) rendu à part, le formatage en ligne (gras, italique, code,
 /// liens) laissé à `AttributedString`. Dynamic Type respecté : seules des tailles sémantiques sont utilisées.
 struct RichText: View {
